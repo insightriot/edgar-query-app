@@ -1,0 +1,21 @@
+{
+  "name": "edgar-query-app",
+  "version": "1.0.0",
+  "description": "Natural language query interface for SEC EDGAR database",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "cd frontend && npm run build",
+    "start": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@vercel/node": "^3.0.12"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

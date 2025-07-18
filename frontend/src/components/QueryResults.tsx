@@ -8,7 +8,7 @@ import {
   BuildingOfficeIcon,
   DocumentTextIcon
 } from '@heroicons/react/24/outline';
-import { QueryResult } from '../types';
+import type { QueryResult } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 
 interface QueryResultsProps {

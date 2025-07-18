@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MagnifyingGlassIcon, SparklesIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { queryApi } from '../services/api';
-import { QueryResult, QuerySuggestion } from '../types';
+import type { QueryResult, QuerySuggestion } from '../types';
 import QueryResults from './QueryResults';
 import LoadingSpinner from './LoadingSpinner';
 

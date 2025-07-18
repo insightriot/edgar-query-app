@@ -5,7 +5,8 @@
       "Bash(mkdir:*)",
       "Bash(npm create:*)",
       "Bash(npx tailwindcss:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }

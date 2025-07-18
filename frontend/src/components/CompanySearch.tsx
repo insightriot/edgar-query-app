@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { MagnifyingGlassIcon, BuildingOfficeIcon } from '@heroicons/react/24/outline';
 import { companyApi } from '../services/api';
-import { CompanySearchResult, Company, Filing } from '../types';
+import type { CompanySearchResult, Company, Filing } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 
 const CompanySearch: React.FC = () => {
