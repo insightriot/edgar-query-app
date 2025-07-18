@@ -1,24 +1,30 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { query } from '../lib/database';
+import { get, set } from '../lib/redis';
 
-// Rate limiting store (in production, use Redis or database)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
-
-function rateLimit(ip: string, maxRequests = 10, windowMs = 60000): boolean {
+async function rateLimit(ip: string, maxRequests = 10, windowMs = 60000): Promise<boolean> {
   const now = Date.now();
-  const key = ip;
-  const current = rateLimitStore.get(key);
+  const key = `ratelimit:${ip}`;
+  
+  try {
+    const current = await get(key);
+    const parsedCurrent = current ? JSON.parse(current) : null;
 
-  if (!current || now > current.resetTime) {
-    rateLimitStore.set(key, { count: 1, resetTime: now + windowMs });
+    if (!parsedCurrent || now > parsedCurrent.resetTime) {
+      await set(key, { count: 1, resetTime: now + windowMs }, Math.ceil(windowMs / 1000));
+      return true;
+    }
+
+    if (parsedCurrent.count >= maxRequests) {
+      return false;
+    }
+
+    await set(key, { count: parsedCurrent.count + 1, resetTime: parsedCurrent.resetTime }, Math.ceil((parsedCurrent.resetTime - now) / 1000));
     return true;
+  } catch (error) {
+    console.error('Rate limiting error:', error);
+    return true; // Allow request if Redis fails
   }
-
-  if (current.count >= maxRequests) {
-    return false;
-  }
-
-  current.count++;
-  return true;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -36,43 +42,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Rate limiting
-  const ip = req.headers['x-forwarded-for'] as string || req.connection?.remoteAddress || 'unknown';
-  if (!rateLimit(ip)) {
+  const ip = req.headers['x-forwarded-for'] as string || 'unknown';
+  const rateLimitPassed = await rateLimit(ip);
+  if (!rateLimitPassed) {
     return res.status(429).json({ error: 'Too many requests' });
   }
 
   try {
-    const { query } = req.body;
+    const { query: queryText } = req.body;
 
-    if (!query || typeof query !== 'string') {
+    if (!queryText || typeof queryText !== 'string') {
       return res.status(400).json({
         error: 'Query is required and must be a string',
         statusCode: 400
       });
     }
 
-    // Basic NLP processing
-    const intent = classifyIntent(query);
-    const entities = extractEntities(query);
+    const startTime = Date.now();
 
-    // Mock response for now - will be replaced with real processing
+    // Basic NLP processing
+    const intent = classifyIntent(queryText);
+    const entities = extractEntities(queryText);
+
+    // Log query to database
+    try {
+      await query(
+        'INSERT INTO query_history (query_text, query_type, intent, entities, ip_address, user_agent) VALUES ($1, $2, $3, $4, $5, $6)',
+        [queryText, 'natural_language', intent, JSON.stringify(entities), ip, req.headers['user-agent']]
+      );
+    } catch (dbError) {
+      console.error('Failed to log query:', dbError);
+      // Continue processing even if logging fails
+    }
+
+    // Process query based on intent
+    let results;
+    try {
+      results = await processQueryWithDatabase(queryText, intent, entities);
+    } catch (error) {
+      console.error('Query processing error:', error);
+      results = {
+        type: 'error_response',
+        message: `Unable to process query at this time. Intent: ${intent}. Entities: ${entities.join(', ') || 'none'}.`,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          processingTime: Date.now() - startTime,
+          source: 'vercel-serverless',
+          error: 'Database processing failed'
+        }
+      };
+    }
+
     const response = {
       success: true,
       data: {
         queryId: Date.now().toString(),
         status: 'completed',
-        query,
+        query: queryText,
         intent,
         entities,
-        results: {
-          type: 'serverless_response',
-          message: `Processed query: "${query}". Intent: ${intent}. Entities: ${entities.join(', ') || 'none'}. Database integration needed for full functionality.`,
-          timestamp: new Date().toISOString(),
-          metadata: {
-            processingTime: Math.floor(Math.random() * 100) + 50,
-            source: 'vercel-serverless'
-          }
-        }
+        results
       }
     };
 
@@ -133,4 +162,196 @@ function extractEntities(query: string): string[] {
   }
   
   return entities;
+}
+
+async function processQueryWithDatabase(queryText: string, intent: string, entities: string[]): Promise<any> {
+  const startTime = Date.now();
+  
+  // Extract company from entities
+  const companyName = entities.find(entity => 
+    !entity.match(/^\d{4}$/) && !entity.match(/^Q[1-4]$/i)
+  );
+
+  switch (intent) {
+    case 'company_info':
+      return await getCompanyInfo(companyName);
+    
+    case 'financial_metrics':
+      return await getFinancialMetrics(companyName, queryText);
+    
+    case 'sec_filings':
+      return await getSecFilings(companyName, queryText);
+    
+    default:
+      return {
+        type: 'general_response',
+        message: `I understand you're asking about: ${queryText}. ${companyName ? `Company: ${companyName}` : 'No specific company identified.'}`,
+        intent,
+        entities,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          processingTime: Date.now() - startTime,
+          source: 'database-integrated'
+        }
+      };
+  }
+}
+
+async function getCompanyInfo(companyName?: string): Promise<any> {
+  if (!companyName) {
+    return {
+      type: 'error_response',
+      message: 'Please specify a company name to get company information.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  try {
+    // Search for company in database
+    const result = await query(
+      'SELECT * FROM companies WHERE LOWER(name) LIKE LOWER($1) OR LOWER(ticker) = LOWER($2) LIMIT 1',
+      [`%${companyName}%`, companyName]
+    );
+
+    if (result.rows.length === 0) {
+      return {
+        type: 'no_results',
+        message: `No company found matching "${companyName}". The company may not be in our database yet.`,
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    const company = result.rows[0];
+    
+    // Get recent filings
+    const filingsResult = await query(
+      'SELECT * FROM filings WHERE cik = $1 ORDER BY filing_date DESC LIMIT 5',
+      [company.cik]
+    );
+
+    return {
+      type: 'company_profile',
+      company,
+      recent_filings: filingsResult.rows,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Company info query error:', error);
+    throw error;
+  }
+}
+
+async function getFinancialMetrics(companyName?: string, queryText?: string): Promise<any> {
+  if (!companyName) {
+    return {
+      type: 'error_response',
+      message: 'Please specify a company name to get financial metrics.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  try {
+    // Find company
+    const companyResult = await query(
+      'SELECT * FROM companies WHERE LOWER(name) LIKE LOWER($1) OR LOWER(ticker) = LOWER($2) LIMIT 1',
+      [`%${companyName}%`, companyName]
+    );
+
+    if (companyResult.rows.length === 0) {
+      return {
+        type: 'no_results',
+        message: `No company found matching "${companyName}".`,
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    const company = companyResult.rows[0];
+    
+    // Determine metric based on query text
+    let concept = 'Revenue';
+    if (queryText?.toLowerCase().includes('revenue') || queryText?.toLowerCase().includes('sales')) {
+      concept = 'Revenue';
+    } else if (queryText?.toLowerCase().includes('profit') || queryText?.toLowerCase().includes('income')) {
+      concept = 'NetIncomeLoss';
+    }
+
+    // Get financial data
+    const financialResult = await query(
+      'SELECT * FROM financial_data WHERE cik = $1 AND concept LIKE $2 ORDER BY fiscal_year DESC, fiscal_period DESC LIMIT 8',
+      [company.cik, `%${concept}%`]
+    );
+
+    return {
+      type: 'financial_data',
+      company,
+      metric: concept,
+      data: financialResult.rows,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Financial metrics query error:', error);
+    throw error;
+  }
+}
+
+async function getSecFilings(companyName?: string, queryText?: string): Promise<any> {
+  if (!companyName) {
+    return {
+      type: 'error_response',
+      message: 'Please specify a company name to get SEC filings.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  try {
+    // Find company
+    const companyResult = await query(
+      'SELECT * FROM companies WHERE LOWER(name) LIKE LOWER($1) OR LOWER(ticker) = LOWER($2) LIMIT 1',
+      [`%${companyName}%`, companyName]
+    );
+
+    if (companyResult.rows.length === 0) {
+      return {
+        type: 'no_results',
+        message: `No company found matching "${companyName}".`,
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    const company = companyResult.rows[0];
+    
+    // Determine form type from query
+    let formFilter = '';
+    if (queryText?.toLowerCase().includes('10-k')) {
+      formFilter = '10-K';
+    } else if (queryText?.toLowerCase().includes('10-q')) {
+      formFilter = '10-Q';
+    } else if (queryText?.toLowerCase().includes('8-k')) {
+      formFilter = '8-K';
+    }
+
+    // Get filings
+    let filingsQuery = 'SELECT * FROM filings WHERE cik = $1';
+    const params = [company.cik];
+    
+    if (formFilter) {
+      filingsQuery += ' AND form = $2';
+      params.push(formFilter);
+    }
+    
+    filingsQuery += ' ORDER BY filing_date DESC LIMIT 20';
+
+    const filingsResult = await query(filingsQuery, params);
+
+    return {
+      type: 'filing_search',
+      company,
+      form_filter: formFilter,
+      filings: filingsResult.rows,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('SEC filings query error:', error);
+    throw error;
+  }
 }

@@ -9,10 +9,13 @@
     "deploy": "vercel --prod"
   },
   "dependencies": {
-    "@vercel/node": "^3.0.12"
+    "@vercel/node": "^3.0.12",
+    "pg": "^8.11.3",
+    "@upstash/redis": "^1.25.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/pg": "^8.10.9",
     "typescript": "^5.0.0"
   },
   "engines": {
