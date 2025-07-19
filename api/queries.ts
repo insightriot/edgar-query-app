@@ -406,6 +406,8 @@ async function getSecFilings(companyName?: string, queryText?: string): Promise<
       formFilter = '10-Q';
     } else if (queryText?.toLowerCase().includes('8-k')) {
       formFilter = '8-K';
+    } else if (queryText?.toLowerCase().includes('comment letter')) {
+      formFilter = 'COMMENT';
     }
 
     // Get filings

@@ -46,6 +46,7 @@ Examples:
 - "What was Apple's revenue in 2023?" → intent: "financial_metrics", companies: ["Apple", "AAPL"], metrics: ["revenue"], timeframes: ["2023"]
 - "Tell me about Tesla" → intent: "company_info", companies: ["Tesla", "TSLA"]
 - "Show me Microsoft's latest 10-K filing" → intent: "sec_filings", companies: ["Microsoft", "MSFT"], timeframes: ["latest"]
+- "Any SEC comment letters for Apple?" → intent: "sec_filings", companies: ["Apple", "AAPL"]
 
 Return ONLY the JSON object, no other text.`;
 
@@ -90,7 +91,7 @@ function fallbackAnalysis(query: string): QueryAnalysis {
   let intent: QueryAnalysis['intent'] = 'general';
   if (lowerQuery.includes('revenue') || lowerQuery.includes('sales') || lowerQuery.includes('income') || lowerQuery.includes('profit')) {
     intent = 'financial_metrics';
-  } else if (lowerQuery.includes('filing') || lowerQuery.includes('10-k') || lowerQuery.includes('10-q') || lowerQuery.includes('8-k')) {
+  } else if (lowerQuery.includes('filing') || lowerQuery.includes('10-k') || lowerQuery.includes('10-q') || lowerQuery.includes('8-k') || lowerQuery.includes('comment letter')) {
     intent = 'sec_filings';
   } else if (lowerQuery.includes('about') || lowerQuery.includes('company') || lowerQuery.includes('business')) {
     intent = 'company_info';
@@ -131,6 +132,16 @@ function fallbackAnalysis(query: string): QueryAnalysis {
   
   if (lowerQuery.includes('latest') || lowerQuery.includes('recent') || lowerQuery.includes('current')) {
     timeframes.push('latest');
+  }
+  
+  // Handle "last X years" patterns
+  const lastYearsMatch = query.match(/last\s+(\d+)\s+year/i);
+  if (lastYearsMatch) {
+    const years = parseInt(lastYearsMatch[1]);
+    const currentYear = new Date().getFullYear();
+    for (let i = 0; i < years; i++) {
+      timeframes.push((currentYear - i).toString());
+    }
   }
 
   return {
