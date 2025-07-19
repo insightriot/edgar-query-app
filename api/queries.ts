@@ -4,9 +4,11 @@ import { get, set } from '../lib/redis';
 import { analyzeQuery, generateResponse } from '../lib/ai-query-processor';
 import { searchCompaniesByTicker, getFinancialMetrics, getRecentFilings } from '../lib/sec-edgar-live';
 
-// Load environment variables for Vercel
-if (process.env.NODE_ENV !== 'production') {
+// Load environment variables for Vercel (always try to load .env.local)
+try {
   require('dotenv').config({ path: '.env.local' });
+} catch (e) {
+  // Ignore if dotenv fails in production
 }
 
 async function rateLimit(ip: string, maxRequests = 10, windowMs = 60000): Promise<boolean> {
@@ -68,9 +70,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const startTime = Date.now();
 
     // AI-enhanced query analysis
-    const analysis = await analyzeQuery(queryText);
-    console.log('AI Analysis:', analysis);
+    console.log('=== QUERY PROCESSING DEBUG ===');
+    console.log('Query:', queryText);
     console.log('Environment check - OpenAI Key:', process.env.OPENAI_API_KEY ? 'Present' : 'Missing');
+    console.log('Environment check - Database URL:', process.env.DATABASE_URL ? 'Present' : 'Missing');
+    console.log('Environment check - SEC User Agent:', process.env.SEC_API_USER_AGENT ? 'Present' : 'Missing');
+    
+    const analysis = await analyzeQuery(queryText);
+    console.log('AI Analysis Result:', JSON.stringify(analysis, null, 2));
 
     // Log query to database
     try {
@@ -84,11 +91,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Process query with AI + live SEC data
+    console.log('=== STARTING AI PROCESSING ===');
     let results;
     try {
       results = await processQueryWithAI(queryText, analysis);
+      console.log('AI Processing Success:', results?.type || 'unknown');
     } catch (error) {
-      console.error('Query processing error:', error);
+      console.error('AI Processing Failed:', error.message);
+      console.error('Error Details:', error);
       results = {
         type: 'error_response',
         message: `Unable to process query at this time. Analysis: ${analysis.explanation}`,
@@ -96,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         metadata: {
           processingTime: Date.now() - startTime,
           source: 'ai-enhanced-vercel',
-          error: 'Processing failed',
+          error: error.message,
           analysis
         }
       };
@@ -175,19 +185,35 @@ function extractEntities(query: string): string[] {
 async function processQueryWithAI(queryText: string, analysis: any): Promise<any> {
   const startTime = Date.now();
   
+  console.log('=== PROCESS QUERY WITH AI ===');
+  console.log('Analysis Intent:', analysis.intent);
+  console.log('Companies Found:', analysis.companies);
+  console.log('Metrics Found:', analysis.metrics);
+  
   try {
     // Try to get live SEC data if companies are identified
     if (analysis.companies.length > 0) {
       const primaryCompany = analysis.companies[0];
+      console.log('Primary Company:', primaryCompany);
       
       // Check if we can get live SEC data
       if (analysis.intent === 'financial_metrics') {
+        console.log('=== ATTEMPTING LIVE SEC DATA ===');
         try {
           // First get company info to get CIK
+          console.log('Step 1: Getting company info for:', primaryCompany);
           const companyInfo = await searchCompaniesByTicker(primaryCompany);
+          console.log('Company Info Retrieved:', companyInfo);
+          
+          console.log('Step 2: Getting financial metrics for CIK:', companyInfo.cik);
           const liveData = await getFinancialMetrics(companyInfo.cik, analysis.metrics[0] || 'Revenues');
+          console.log('Financial Data Retrieved:', liveData ? 'Success' : 'Failed');
+          
           if (liveData) {
+            console.log('Step 3: Generating AI response');
             const aiResponse = await generateResponse(analysis, liveData);
+            console.log('AI Response Generated:', aiResponse ? 'Success' : 'Failed');
+            
             return {
               type: 'live_financial_data',
               company: liveData.company,
@@ -199,7 +225,8 @@ async function processQueryWithAI(queryText: string, analysis: any): Promise<any
             };
           }
         } catch (secError) {
-          console.log('Live SEC API failed, falling back to database:', secError.message);
+          console.error('Live SEC API failed:', secError.message);
+          console.error('SEC Error Details:', secError);
         }
       }
       
@@ -230,6 +257,8 @@ async function processQueryWithAI(queryText: string, analysis: any): Promise<any
     }
     
     // Fallback to database processing
+    console.log('=== FALLING BACK TO DATABASE ===');
+    console.log('Reason: Live SEC data unavailable or failed');
     return await processQueryWithDatabase(queryText, analysis.intent, analysis.companies);
     
   } catch (error) {
@@ -253,22 +282,31 @@ async function processQueryWithAI(queryText: string, analysis: any): Promise<any
 async function processQueryWithDatabase(queryText: string, intent: string, entities: string[]): Promise<any> {
   const startTime = Date.now();
   
+  console.log('=== DATABASE PROCESSING ===');
+  console.log('Intent:', intent);
+  console.log('Entities:', entities);
+  
   // Extract company from entities
   const companyName = entities.find(entity => 
     !entity.match(/^\d{4}$/) && !entity.match(/^Q[1-4]$/i)
   );
+  console.log('Extracted Company Name:', companyName);
 
   switch (intent) {
     case 'company_info':
+      console.log('Database: Getting company info');
       return await getCompanyInfo(companyName);
     
     case 'financial_metrics':
-      return await getFinancialMetrics(companyName, queryText);
+      console.log('Database: Getting financial metrics');
+      return await getFinancialMetricsFromDatabase(companyName, queryText);
     
     case 'sec_filings':
+      console.log('Database: Getting SEC filings');
       return await getSecFilings(companyName, queryText);
     
     default:
+      console.log('Database: Default general response');
       return {
         type: 'general_response',
         message: `I understand you're asking about: ${queryText}. ${companyName ? `Company: ${companyName}` : 'No specific company identified.'}`,
@@ -327,7 +365,7 @@ async function getCompanyInfo(companyName?: string): Promise<any> {
   }
 }
 
-async function getFinancialMetrics(companyName?: string, queryText?: string): Promise<any> {
+async function getFinancialMetricsFromDatabase(companyName?: string, queryText?: string): Promise<any> {
   if (!companyName) {
     return {
       type: 'error_response',
