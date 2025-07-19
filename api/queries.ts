@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../lib/database';
 import { get, set } from '../lib/redis';
+import { analyzeQuery, generateResponse } from '../lib/ai-query-processor';
+import { searchCompaniesByTicker, getFinancialMetrics, getRecentFilings } from '../lib/sec-edgar-live';
 
 async function rateLimit(ip: string, maxRequests = 10, windowMs = 60000): Promise<boolean> {
   const now = Date.now();
@@ -60,35 +62,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const startTime = Date.now();
 
-    // Basic NLP processing
-    const intent = classifyIntent(queryText);
-    const entities = extractEntities(queryText);
+    // AI-enhanced query analysis
+    const analysis = await analyzeQuery(queryText);
+    console.log('AI Analysis:', analysis);
 
     // Log query to database
     try {
       await query(
         'INSERT INTO query_history (query_text, query_type, intent, entities, ip_address, user_agent) VALUES ($1, $2, $3, $4, $5, $6)',
-        [queryText, 'natural_language', intent, JSON.stringify(entities), ip, req.headers['user-agent']]
+        [queryText, 'ai_enhanced', analysis.intent, JSON.stringify(analysis), ip, req.headers['user-agent']]
       );
     } catch (dbError) {
       console.error('Failed to log query:', dbError);
       // Continue processing even if logging fails
     }
 
-    // Process query based on intent
+    // Process query with AI + live SEC data
     let results;
     try {
-      results = await processQueryWithDatabase(queryText, intent, entities);
+      results = await processQueryWithAI(queryText, analysis);
     } catch (error) {
       console.error('Query processing error:', error);
       results = {
         type: 'error_response',
-        message: `Unable to process query at this time. Intent: ${intent}. Entities: ${entities.join(', ') || 'none'}.`,
+        message: `Unable to process query at this time. Analysis: ${analysis.explanation}`,
         timestamp: new Date().toISOString(),
         metadata: {
           processingTime: Date.now() - startTime,
-          source: 'vercel-serverless',
-          error: 'Database processing failed'
+          source: 'ai-enhanced-vercel',
+          error: 'Processing failed',
+          analysis
         }
       };
     }
@@ -99,8 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         queryId: Date.now().toString(),
         status: 'completed',
         query: queryText,
-        intent,
-        entities,
+        analysis,
         results
       }
     };
@@ -162,6 +164,82 @@ function extractEntities(query: string): string[] {
   }
   
   return entities;
+}
+
+async function processQueryWithAI(queryText: string, analysis: any): Promise<any> {
+  const startTime = Date.now();
+  
+  try {
+    // Try to get live SEC data if companies are identified
+    if (analysis.companies.length > 0) {
+      const primaryCompany = analysis.companies[0];
+      
+      // Check if we can get live SEC data
+      if (analysis.intent === 'financial_metrics') {
+        try {
+          const liveData = await getFinancialMetrics(primaryCompany, analysis.metrics[0] || 'Revenues');
+          if (liveData) {
+            const aiResponse = await generateResponse(analysis, liveData);
+            return {
+              type: 'live_financial_data',
+              company: liveData.company,
+              metric: liveData.concept,
+              data: liveData.data,
+              ai_response: aiResponse,
+              source: 'live_sec_edgar',
+              timestamp: new Date().toISOString()
+            };
+          }
+        } catch (secError) {
+          console.log('Live SEC API failed, falling back to database:', secError.message);
+        }
+      }
+      
+      if (analysis.intent === 'company_info') {
+        try {
+          const liveData = await searchCompaniesByTicker(primaryCompany);
+          if (liveData) {
+            const aiResponse = await generateResponse(analysis, liveData);
+            return {
+              type: 'live_company_profile',
+              company: {
+                name: liveData.name,
+                cik: liveData.cik,
+                sic: liveData.sic,
+                sicDescription: liveData.sicDescription,
+                category: liveData.category,
+                fiscalYearEnd: liveData.fiscalYearEnd
+              },
+              ai_response: aiResponse,
+              source: 'live_sec_edgar',
+              timestamp: new Date().toISOString()
+            };
+          }
+        } catch (secError) {
+          console.log('Live SEC API failed, falling back to database:', secError.message);
+        }
+      }
+    }
+    
+    // Fallback to database processing
+    return await processQueryWithDatabase(queryText, analysis.intent, analysis.companies);
+    
+  } catch (error) {
+    console.error('AI processing error:', error);
+    
+    // Final fallback
+    const aiResponse = await generateResponse(analysis, { error: error.message });
+    return {
+      type: 'ai_response',
+      message: aiResponse,
+      analysis,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        processingTime: Date.now() - startTime,
+        source: 'ai-fallback'
+      }
+    };
+  }
 }
 
 async function processQueryWithDatabase(queryText: string, intent: string, entities: string[]): Promise<any> {

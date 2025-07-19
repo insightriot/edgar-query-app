@@ -12,7 +12,8 @@
     "@upstash/redis": "^1.25.1",
     "@vercel/node": "^3.0.12",
     "dotenv": "^17.2.0",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "openai": "^4.20.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
