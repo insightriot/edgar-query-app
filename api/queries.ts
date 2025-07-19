@@ -281,6 +281,42 @@ async function processQueryWithAI(queryText: string, analysis: any): Promise<any
           console.log('Live SEC API failed, falling back to database:', secError.message);
         }
       }
+      
+      if (analysis.intent === 'sec_filings') {
+        console.log('=== ATTEMPTING SEC FILINGS SEARCH ===');
+        try {
+          // Get company info first
+          console.log('Step 1: Getting company info for filings search:', primaryCompany);
+          const companyInfo = await searchCompaniesByTicker(primaryCompany);
+          console.log('Company Info Retrieved:', companyInfo);
+          
+          // Get recent filings
+          console.log('Step 2: Getting recent filings for CIK:', companyInfo.cik);
+          const recentFilings = await getRecentFilings(companyInfo.cik, 5);
+          console.log('Recent Filings Retrieved:', recentFilings.length, 'filings');
+          
+          if (recentFilings.length > 0) {
+            console.log('Step 3: Generating AI response for filings');
+            const aiResponse = await generateResponse(analysis, {
+              type: 'recent_filings',
+              company: companyInfo,
+              filings: recentFilings
+            });
+            
+            return {
+              type: 'live_recent_filings',
+              company: companyInfo,
+              filings: recentFilings,
+              ai_response: aiResponse,
+              source: 'live_sec_filings',
+              timestamp: new Date().toISOString()
+            };
+          }
+        } catch (secError) {
+          console.error('SEC filings search failed:', secError.message);
+          console.error('SEC Error Details:', secError);
+        }
+      }
     }
     
     // Fallback to database processing

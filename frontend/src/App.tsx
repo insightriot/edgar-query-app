@@ -60,6 +60,13 @@ function App() {
         }
         break;
         
+      case 'live_recent_filings':
+        if (results.filings && results.filings.length > 0) {
+          const latest = results.filings[0];
+          return `🔴 LIVE: ${results.company?.name || 'Company'}'s most recent filing is a ${latest.form} filed on ${latest.filingDate}. ${latest.primaryDocDescription || ''}`;
+        }
+        break;
+        
       case 'live_financial_data':
         if (results.company && results.data && results.data.length > 0) {
           const company = results.company;
