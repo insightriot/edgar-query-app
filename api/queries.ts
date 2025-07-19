@@ -398,16 +398,21 @@ async function getSecFilings(companyName?: string, queryText?: string): Promise<
 
     const company = companyResult.rows[0];
     
-    // Determine form type from query
+    // Use analysis filing types if available, otherwise fall back to text matching
     let formFilter = '';
-    if (queryText?.toLowerCase().includes('10-k')) {
-      formFilter = '10-K';
-    } else if (queryText?.toLowerCase().includes('10-q')) {
-      formFilter = '10-Q';
-    } else if (queryText?.toLowerCase().includes('8-k')) {
-      formFilter = '8-K';
-    } else if (queryText?.toLowerCase().includes('comment letter')) {
-      formFilter = 'COMMENT';
+    if (analysis.filingTypes && analysis.filingTypes.length > 0) {
+      formFilter = analysis.filingTypes[0]; // Use the first matched filing type
+    } else {
+      // Fallback to basic text matching
+      if (queryText?.toLowerCase().includes('10-k')) {
+        formFilter = '10-K';
+      } else if (queryText?.toLowerCase().includes('10-q')) {
+        formFilter = '10-Q';
+      } else if (queryText?.toLowerCase().includes('8-k')) {
+        formFilter = '8-K';
+      } else if (queryText?.toLowerCase().includes('comment letter')) {
+        formFilter = 'COMMENT';
+      }
     }
 
     // Get filings

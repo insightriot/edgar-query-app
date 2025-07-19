@@ -1,5 +1,6 @@
 // AI-powered query processing using OpenAI o4-mini
 import OpenAI from 'openai';
+import { matchFilingTypes, isFilingQuery, getFormCodes } from './sec-filing-types';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -10,6 +11,7 @@ export interface QueryAnalysis {
   companies: string[];
   metrics: string[];
   timeframes: string[];
+  filingTypes: string[];
   confidence: number;
   explanation: string;
 }
@@ -31,6 +33,7 @@ Please respond with ONLY a JSON object containing:
   "companies": ["company names or tickers mentioned"],
   "metrics": ["revenue", "profit", "assets", etc.],
   "timeframes": ["2023", "Q1", "latest", etc.],
+  "filingTypes": ["10-K", "10-Q", "proxy", "comment letters", etc.],
   "confidence": 0.0-1.0,
   "explanation": "Brief explanation of what the user is asking"
 }
@@ -40,13 +43,16 @@ Focus on:
 - Companies: Any company names, tickers, or references (be generous - include AAPL for Apple, TSLA for Tesla, etc.)
 - Metrics: Financial metrics or data points
 - Timeframes: Years, quarters, or time periods mentioned
+- FilingTypes: Any SEC forms, reports, or document types mentioned (10-K, proxy, comment letters, etc.)
 - Confidence: How confident you are in the analysis
 
 Examples:
-- "What was Apple's revenue in 2023?" → intent: "financial_metrics", companies: ["Apple", "AAPL"], metrics: ["revenue"], timeframes: ["2023"]
-- "Tell me about Tesla" → intent: "company_info", companies: ["Tesla", "TSLA"]
-- "Show me Microsoft's latest 10-K filing" → intent: "sec_filings", companies: ["Microsoft", "MSFT"], timeframes: ["latest"]
-- "Any SEC comment letters for Apple?" → intent: "sec_filings", companies: ["Apple", "AAPL"]
+- "What was Apple's revenue in 2023?" → intent: "financial_metrics", companies: ["Apple", "AAPL"], metrics: ["revenue"], timeframes: ["2023"], filingTypes: []
+- "Tell me about Tesla" → intent: "company_info", companies: ["Tesla", "TSLA"], filingTypes: []
+- "Show me Microsoft's latest 10-K filing" → intent: "sec_filings", companies: ["Microsoft", "MSFT"], timeframes: ["latest"], filingTypes: ["10-K"]
+- "Any SEC comment letters for Apple?" → intent: "sec_filings", companies: ["Apple", "AAPL"], filingTypes: ["comment letters"]
+- "Find Tesla's proxy statement" → intent: "sec_filings", companies: ["Tesla", "TSLA"], filingTypes: ["proxy", "DEF 14A"]
+- "Show me Netflix's 8-K reports from last year" → intent: "sec_filings", companies: ["Netflix", "NFLX"], timeframes: ["2024"], filingTypes: ["8-K"]
 
 Return ONLY the JSON object, no other text.`;
 
@@ -87,11 +93,15 @@ Return ONLY the JSON object, no other text.`;
 function fallbackAnalysis(query: string): QueryAnalysis {
   const lowerQuery = query.toLowerCase();
   
+  // Use intelligent filing type matching
+  const matchedFilings = matchFilingTypes(query);
+  const isFilingRelated = isFilingQuery(query) || matchedFilings.length > 0;
+  
   // Basic intent classification
   let intent: QueryAnalysis['intent'] = 'general';
   if (lowerQuery.includes('revenue') || lowerQuery.includes('sales') || lowerQuery.includes('income') || lowerQuery.includes('profit')) {
     intent = 'financial_metrics';
-  } else if (lowerQuery.includes('filing') || lowerQuery.includes('10-k') || lowerQuery.includes('10-q') || lowerQuery.includes('8-k') || lowerQuery.includes('comment letter')) {
+  } else if (isFilingRelated) {
     intent = 'sec_filings';
   } else if (lowerQuery.includes('about') || lowerQuery.includes('company') || lowerQuery.includes('business')) {
     intent = 'company_info';
@@ -149,8 +159,9 @@ function fallbackAnalysis(query: string): QueryAnalysis {
     companies: [...new Set(companies)], // Remove duplicates
     metrics: [...new Set(metrics)],
     timeframes: [...new Set(timeframes)],
+    filingTypes: getFormCodes(matchedFilings),
     confidence: 0.7,
-    explanation: `Basic pattern matching analysis: Looking for ${intent} about ${companies.join(', ') || 'companies'}`
+    explanation: `Basic pattern matching analysis: Looking for ${intent} about ${companies.join(', ') || 'companies'}${matchedFilings.length > 0 ? ` (${matchedFilings.length} filing types matched)` : ''}`
   };
 }
 
