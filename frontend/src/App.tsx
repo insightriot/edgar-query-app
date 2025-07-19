@@ -45,6 +45,39 @@ function App() {
     setQuery(exampleQuery);
   };
 
+  const formatResponse = (results: any) => {
+    if (!results) return 'No results available';
+    
+    switch (results.type) {
+      case 'financial_data':
+        if (results.company && results.data && results.data.length > 0) {
+          const company = results.company;
+          const financialData = results.data[0];
+          const value = financialData.value ? `$${(parseFloat(financialData.value) / 1000000000).toFixed(1)}B` : 'N/A';
+          return `${company.name} (${company.ticker}): ${results.metric} for ${financialData.fiscal_year} was ${value}`;
+        }
+        break;
+        
+      case 'company_profile':
+        if (results.company) {
+          const company = results.company;
+          return `${company.name} (${company.ticker}) is in the ${company.industry} industry with ${company.employees?.toLocaleString()} employees. ${company.description?.substring(0, 150)}...`;
+        }
+        break;
+        
+      case 'filing_search':
+        if (results.company && results.filings) {
+          return `Found ${results.filings.length} filings for ${results.company.name}`;
+        }
+        break;
+        
+      default:
+        return results.message || JSON.stringify(results, null, 2);
+    }
+    
+    return 'Query processed but no specific results available';
+  };
+
   const examples = [
     {
       category: 'Company Information',
@@ -161,7 +194,7 @@ function App() {
                         <strong>Query:</strong> "{result.data.query}"
                       </div>
                       <div className="result-message">
-                        <strong>Response:</strong> {result.data.results.message}
+                        <strong>Response:</strong> {formatResponse(result.data.results)}
                       </div>
                       <div className="result-message">
                         <strong>Status:</strong> {result.data.status}
