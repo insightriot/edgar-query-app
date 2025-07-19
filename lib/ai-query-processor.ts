@@ -57,7 +57,7 @@ Examples:
 Return ONLY the JSON object, no other text.`;
 
     const response = await openai.chat.completions.create({
-      model: 'o4-mini-2025-04-16',
+      model: 'gpt-4o-mini',
       max_tokens: 500,
       temperature: 0.1,
       messages: [
@@ -189,7 +189,7 @@ You are a helpful financial data assistant. Please provide a clear, conversation
 Keep the response concise but informative (2-3 sentences maximum). If asking about 2024 data but only 2022 data exists, explain this clearly.`;
 
     const response = await openai.chat.completions.create({
-      model: 'o4-mini-2025-04-16',
+      model: 'gpt-4o-mini',
       max_tokens: 300,
       temperature: 0.3,
       messages: [

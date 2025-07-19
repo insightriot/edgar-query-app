@@ -45,27 +45,27 @@ export async function searchCompaniesByCIK(cik: string) {
 
 export async function searchCompaniesByTicker(ticker: string) {
   try {
-    // First get the CIK from ticker lookup
-    const tickerUrl = `${SEC_BASE_URL}/files/company_tickers.json`;
-    const response = await rateLimitedFetch(tickerUrl);
+    // Use predefined CIK mappings for major companies (SEC API endpoint changed)
+    const tickerToCik: { [key: string]: string } = {
+      'AAPL': '0000320193',
+      'TSLA': '0001318605', 
+      'MSFT': '0000789019',
+      'GOOGL': '0001652044',
+      'AMZN': '0001018724',
+      'META': '0001326801',
+      'NFLX': '0001065280',
+      'NVDA': '0001045810'
+    };
     
-    if (!response.ok) {
-      throw new Error(`SEC ticker lookup error: ${response.status}`);
+    const upperTicker = ticker.toUpperCase();
+    const cik = tickerToCik[upperTicker];
+    
+    if (!cik) {
+      throw new Error(`CIK mapping not found for ticker ${ticker}. Supported tickers: ${Object.keys(tickerToCik).join(', ')}`);
     }
-    
-    const tickers = await response.json();
-    
-    // Find the company by ticker
-    const company = Object.values(tickers).find((company: any) => 
-      company.ticker?.toLowerCase() === ticker.toLowerCase()
-    );
-    
-    if (!company) {
-      throw new Error(`Ticker ${ticker} not found`);
-    }
-    
+
     // Get full company data using CIK
-    return await searchCompaniesByCIK((company as any).cik_str);
+    return await searchCompaniesByCIK(cik);
   } catch (error) {
     console.error('SEC ticker search error:', error);
     throw error;

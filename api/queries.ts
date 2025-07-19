@@ -4,6 +4,11 @@ import { get, set } from '../lib/redis';
 import { analyzeQuery, generateResponse } from '../lib/ai-query-processor';
 import { searchCompaniesByTicker, getFinancialMetrics, getRecentFilings } from '../lib/sec-edgar-live';
 
+// Load environment variables for Vercel
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config({ path: '.env.local' });
+}
+
 async function rateLimit(ip: string, maxRequests = 10, windowMs = 60000): Promise<boolean> {
   const now = Date.now();
   const key = `ratelimit:${ip}`;
@@ -65,6 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // AI-enhanced query analysis
     const analysis = await analyzeQuery(queryText);
     console.log('AI Analysis:', analysis);
+    console.log('Environment check - OpenAI Key:', process.env.OPENAI_API_KEY ? 'Present' : 'Missing');
 
     // Log query to database
     try {
