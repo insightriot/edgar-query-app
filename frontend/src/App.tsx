@@ -48,7 +48,28 @@ function App() {
   const formatResponse = (results: any) => {
     if (!results) return 'No results available';
     
+    // If we have an AI response, use that first!
+    if (results.ai_response) {
+      return results.ai_response;
+    }
+    
     switch (results.type) {
+      case 'live_financial_data':
+        if (results.company && results.data && results.data.length > 0) {
+          const company = results.company;
+          const financialData = results.data[0];
+          const value = financialData.value ? `$${(parseFloat(financialData.value) / 1000000000).toFixed(1)}B` : 'N/A';
+          return `🔴 LIVE DATA: ${company.name}: ${results.metric} for ${financialData.fiscal_year} was ${value}`;
+        }
+        break;
+
+      case 'live_company_profile':
+        if (results.company) {
+          const company = results.company;
+          return `🔴 LIVE DATA: ${company.name} (CIK: ${company.cik}) - ${company.sicDescription || 'Public Company'}`;
+        }
+        break;
+        
       case 'financial_data':
         if (results.company && results.data && results.data.length > 0) {
           const company = results.company;
@@ -70,9 +91,12 @@ function App() {
           return `Found ${results.filings.length} filings for ${results.company.name}`;
         }
         break;
+
+      case 'ai_response':
+        return results.message || 'AI processing completed';
         
       default:
-        return results.message || JSON.stringify(results, null, 2);
+        return results.message || 'Query processed successfully - detailed results available';
     }
     
     return 'Query processed but no specific results available';
