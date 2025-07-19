@@ -48,20 +48,38 @@ export async function searchCompaniesByTicker(ticker: string) {
     // Use predefined CIK mappings for major companies (SEC API endpoint changed)
     const tickerToCik: { [key: string]: string } = {
       'AAPL': '0000320193',
-      'TSLA': '0001318605', 
+      'APPLE': '0000320193',
+      'TSLA': '0001318605',
+      'TESLA': '0001318605',
       'MSFT': '0000789019',
+      'MICROSOFT': '0000789019',
       'GOOGL': '0001652044',
+      'GOOGLE': '0001652044',
+      'ALPHABET': '0001652044',
       'AMZN': '0001018724',
+      'AMAZON': '0001018724',
       'META': '0001326801',
+      'FACEBOOK': '0001326801',
       'NFLX': '0001065280',
-      'NVDA': '0001045810'
+      'NETFLIX': '0001065280',
+      'NVDA': '0001045810',
+      'NVIDIA': '0001045810'
     };
     
     const upperTicker = ticker.toUpperCase();
     const cik = tickerToCik[upperTicker];
     
     if (!cik) {
-      throw new Error(`CIK mapping not found for ticker ${ticker}. Supported tickers: ${Object.keys(tickerToCik).join(', ')}`);
+      // Try to extract ticker from company name like "Tesla (TSLA)"
+      const tickerMatch = ticker.match(/\(([A-Z]+)\)/);
+      if (tickerMatch) {
+        const extractedTicker = tickerMatch[1];
+        const extractedCik = tickerToCik[extractedTicker];
+        if (extractedCik) {
+          return await searchCompaniesByCIK(extractedCik);
+        }
+      }
+      throw new Error(`CIK mapping not found for ticker ${ticker}. Supported: AAPL, TSLA, MSFT, GOOGL, AMZN, META, NFLX, NVDA`);
     }
 
     // Get full company data using CIK
