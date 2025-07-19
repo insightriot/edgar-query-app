@@ -1,8 +1,8 @@
-// AI-powered query processing using OpenAI
-import OpenAI from 'openai';
+// AI-powered query processing using Anthropic Claude
+import Anthropic from '@anthropic-ai/sdk';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export interface QueryAnalysis {
@@ -15,18 +15,17 @@ export interface QueryAnalysis {
 }
 
 export async function analyzeQuery(query: string): Promise<QueryAnalysis> {
-  if (!process.env.OPENAI_API_KEY) {
-    // Fallback to basic pattern matching if no OpenAI key
+  if (!process.env.ANTHROPIC_API_KEY) {
+    // Fallback to basic pattern matching if no Anthropic key
     return fallbackAnalysis(query);
   }
 
   try {
-    const prompt = `
-Analyze this SEC EDGAR database query and extract structured information:
+    const prompt = `Analyze this SEC EDGAR database query and extract structured information.
 
 Query: "${query}"
 
-Please respond with a JSON object containing:
+Please respond with ONLY a JSON object containing:
 {
   "intent": "company_info" | "financial_metrics" | "sec_filings" | "comparison" | "general",
   "companies": ["company names or tickers mentioned"],
@@ -38,44 +37,41 @@ Please respond with a JSON object containing:
 
 Focus on:
 - Intent: What type of information is being requested?
-- Companies: Any company names, tickers, or references
+- Companies: Any company names, tickers, or references (be generous - include AAPL for Apple, TSLA for Tesla, etc.)
 - Metrics: Financial metrics or data points
 - Timeframes: Years, quarters, or time periods mentioned
 - Confidence: How confident you are in the analysis
 
 Examples:
-- "What was Apple's revenue in 2023?" → intent: "financial_metrics", companies: ["Apple"], metrics: ["revenue"], timeframes: ["2023"]
-- "Tell me about Tesla" → intent: "company_info", companies: ["Tesla"]
-- "Show me Microsoft's latest 10-K filing" → intent: "sec_filings", companies: ["Microsoft"], timeframes: ["latest"]
-`;
+- "What was Apple's revenue in 2023?" → intent: "financial_metrics", companies: ["Apple", "AAPL"], metrics: ["revenue"], timeframes: ["2023"]
+- "Tell me about Tesla" → intent: "company_info", companies: ["Tesla", "TSLA"]
+- "Show me Microsoft's latest 10-K filing" → intent: "sec_filings", companies: ["Microsoft", "MSFT"], timeframes: ["latest"]
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+Return ONLY the JSON object, no other text.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 500,
+      temperature: 0.1,
       messages: [
-        {
-          role: 'system',
-          content: 'You are an expert at analyzing SEC EDGAR database queries. Always respond with valid JSON.'
-        },
         {
           role: 'user',
           content: prompt
         }
-      ],
-      temperature: 0.1,
-      max_tokens: 500,
+      ]
     });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type from Claude');
     }
 
     // Parse the JSON response
-    const analysis = JSON.parse(content);
+    const analysis = JSON.parse(content.text);
     
     // Validate the response structure
     if (!analysis.intent || !Array.isArray(analysis.companies)) {
-      throw new Error('Invalid response structure from OpenAI');
+      throw new Error('Invalid response structure from Claude');
     }
 
     return analysis;
@@ -148,13 +144,12 @@ function fallbackAnalysis(query: string): QueryAnalysis {
 }
 
 export async function generateResponse(analysis: QueryAnalysis, data: any): Promise<string> {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return fallbackResponse(analysis, data);
   }
 
   try {
-    const prompt = `
-Generate a natural, informative response based on this query analysis and data:
+    const prompt = `Generate a natural, informative response based on this query analysis and data.
 
 Query Analysis:
 ${JSON.stringify(analysis, null, 2)}
@@ -162,32 +157,33 @@ ${JSON.stringify(analysis, null, 2)}
 Retrieved Data:
 ${JSON.stringify(data, null, 2)}
 
-Please provide a clear, conversational response that:
+You are a helpful financial data assistant. Please provide a clear, conversational response that:
 1. Directly answers the user's question
 2. Includes specific numbers and details from the data
-3. Provides context and insights
+3. Provides context and insights when data is missing or limited
 4. Is easy to read and understand
+5. Explains if data is not available for the requested timeframe
 
-Keep the response concise but informative (2-3 sentences maximum).
-`;
+Keep the response concise but informative (2-3 sentences maximum). If asking about 2024 data but only 2022 data exists, explain this clearly.`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 300,
+      temperature: 0.3,
       messages: [
-        {
-          role: 'system',
-          content: 'You are a helpful financial data assistant. Provide clear, accurate responses based on SEC EDGAR data.'
-        },
         {
           role: 'user',
           content: prompt
         }
-      ],
-      temperature: 0.3,
-      max_tokens: 200,
+      ]
     });
 
-    return response.choices[0]?.message?.content || fallbackResponse(analysis, data);
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type from Claude');
+    }
+
+    return content.text || fallbackResponse(analysis, data);
 
   } catch (error) {
     console.error('AI response generation error:', error);
