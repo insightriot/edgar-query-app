@@ -107,9 +107,18 @@ export async function getCompanyFacts(cik: string) {
   }
 }
 
-export async function getRecentFilings(cik: string, count = 10) {
+export async function getRecentFilings(cik: string, count = 10, formType?: string) {
   try {
-    const companyData = await searchCompaniesByCIK(cik);
+    const paddedCIK = cik.padStart(10, '0');
+    const url = `${SEC_BASE_URL}/submissions/CIK${paddedCIK}.json`;
+    
+    const response = await rateLimitedFetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`SEC submissions error: ${response.status}`);
+    }
+    
+    const companyData = await response.json();
     
     if (!companyData.filings || !companyData.filings.recent) {
       return [];
@@ -118,21 +127,60 @@ export async function getRecentFilings(cik: string, count = 10) {
     const filings = companyData.filings.recent;
     const recentFilings = [];
     
-    for (let i = 0; i < Math.min(count, filings.accessionNumber.length); i++) {
-      recentFilings.push({
-        accessionNumber: filings.accessionNumber[i],
-        form: filings.form[i],
-        filingDate: filings.filingDate[i],
-        reportDate: filings.reportDate[i],
-        primaryDocument: filings.primaryDocument[i],
-        primaryDocDescription: filings.primaryDocDescription[i],
-      });
+    for (let i = 0; i < filings.accessionNumber.length && recentFilings.length < count; i++) {
+      // Filter by form type if specified
+      if (!formType || filings.form[i] === formType) {
+        recentFilings.push({
+          accessionNumber: filings.accessionNumber[i],
+          form: filings.form[i],
+          filingDate: filings.filingDate[i],
+          reportDate: filings.reportDate[i],
+          primaryDocument: filings.primaryDocument[i],
+          primaryDocDescription: filings.primaryDocDescription[i],
+          items: filings.items ? filings.items[i] : '',
+        });
+      }
     }
     
     return recentFilings;
   } catch (error) {
     console.error('SEC recent filings error:', error);
     throw error;
+  }
+}
+
+// New function to detect and extract 8-K earnings data
+export async function getLatestEarningsRelease(cik: string) {
+  try {
+    // Get recent 8-K filings
+    const recent8Ks = await getRecentFilings(cik, 10, '8-K');
+    
+    // Look for earnings-related 8-Ks (Item 2.02 or earnings keywords)
+    const earningsFilings = recent8Ks.filter(filing => {
+      const items = filing.items?.toLowerCase() || '';
+      const description = filing.primaryDocDescription?.toLowerCase() || '';
+      return items.includes('2.02') || 
+             description.includes('earnings') || 
+             description.includes('results of operations') ||
+             description.includes('financial results');
+    });
+    
+    if (earningsFilings.length === 0) {
+      return null;
+    }
+    
+    // Return the most recent earnings filing
+    const latestEarnings = earningsFilings[0];
+    return {
+      filing: latestEarnings,
+      type: '8-K_earnings',
+      isRecentEarnings: true,
+      filingDate: latestEarnings.filingDate,
+      documentUrl: `https://www.sec.gov/Archives/edgar/data/${cik.padStart(10, '0')}/${latestEarnings.accessionNumber.replace(/-/g, '')}/${latestEarnings.primaryDocument}`
+    };
+  } catch (error) {
+    console.error('Error getting earnings release:', error);
+    return null;
   }
 }
 
@@ -164,16 +212,17 @@ export async function getFinancialMetrics(cik: string, concept: string = 'Revenu
       return null;
     }
     
-    // Get the most recent annual data
-    const annualData = conceptData.units[units]
-      .filter((item: any) => item.form === '10-K')
+    // Get financial data from all relevant filing types
+    const relevantForms = ['10-K', '10-Q', '8-K', '20-F', '40-F'];
+    const financialData = conceptData.units[units]
+      .filter((item: any) => relevantForms.includes(item.form))
       .sort((a: any, b: any) => new Date(b.end).getTime() - new Date(a.end).getTime())
-      .slice(0, 5); // Last 5 years
+      .slice(0, 10); // Get more records to find latest data
     
     return {
       concept: actualConcept,
       unit: units,
-      data: annualData,
+      data: financialData,
       company: {
         name: facts.entityName,
         cik: facts.cik,

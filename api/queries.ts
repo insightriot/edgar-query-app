@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../lib/database';
 import { get, set } from '../lib/redis';
 import { analyzeQuery, generateResponse } from '../lib/ai-query-processor';
-import { searchCompaniesByTicker, getFinancialMetrics, getRecentFilings } from '../lib/sec-edgar-live';
+import { searchCompaniesByTicker, getFinancialMetrics, getRecentFilings, getLatestEarningsRelease } from '../lib/sec-edgar-live';
 
 // Load environment variables for Vercel (always try to load .env.local)
 try {
@@ -205,12 +205,39 @@ async function processQueryWithAI(queryText: string, analysis: any): Promise<any
           const companyInfo = await searchCompaniesByTicker(primaryCompany);
           console.log('Company Info Retrieved:', companyInfo);
           
-          console.log('Step 2: Getting financial metrics for CIK:', companyInfo.cik);
+          // Step 2: Check for recent earnings release (8-K) first
+          console.log('Step 2a: Checking for recent earnings release');
+          const earningsRelease = await getLatestEarningsRelease(companyInfo.cik);
+          console.log('Earnings Release Found:', earningsRelease ? 'Yes' : 'No');
+          
+          if (earningsRelease) {
+            console.log('Step 2b: Using earnings release data');
+            const aiResponse = await generateResponse(analysis, {
+              type: 'earnings_release',
+              filing: earningsRelease.filing,
+              documentUrl: earningsRelease.documentUrl,
+              filingDate: earningsRelease.filingDate,
+              company: companyInfo
+            });
+            
+            return {
+              type: 'live_earnings_data',
+              company: companyInfo,
+              filing: earningsRelease.filing,
+              documentUrl: earningsRelease.documentUrl,
+              ai_response: aiResponse,
+              source: 'live_sec_8k',
+              timestamp: new Date().toISOString()
+            };
+          }
+          
+          // Step 3: Fall back to XBRL financial metrics
+          console.log('Step 3: Getting XBRL financial metrics for CIK:', companyInfo.cik);
           const liveData = await getFinancialMetrics(companyInfo.cik, analysis.metrics[0] || 'Revenues');
           console.log('Financial Data Retrieved:', liveData ? 'Success' : 'Failed');
           
           if (liveData) {
-            console.log('Step 3: Generating AI response');
+            console.log('Step 4: Generating AI response');
             const aiResponse = await generateResponse(analysis, liveData);
             console.log('AI Response Generated:', aiResponse ? 'Success' : 'Failed');
             

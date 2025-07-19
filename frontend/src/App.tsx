@@ -54,6 +54,12 @@ function App() {
     }
     
     switch (results.type) {
+      case 'live_earnings_data':
+        if (results.filing) {
+          return `🔴 LIVE EARNINGS: ${results.company?.name || 'Company'} filed an 8-K on ${results.filing.filingDate} with latest financial results. View filing: ${results.documentUrl}`;
+        }
+        break;
+        
       case 'live_financial_data':
         if (results.company && results.data && results.data.length > 0) {
           const company = results.company;
