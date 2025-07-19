@@ -1,8 +1,8 @@
-// AI-powered query processing using Anthropic Claude
-import Anthropic from '@anthropic-ai/sdk';
+// AI-powered query processing using OpenAI o4-mini
+import OpenAI from 'openai';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 export interface QueryAnalysis {
@@ -15,8 +15,8 @@ export interface QueryAnalysis {
 }
 
 export async function analyzeQuery(query: string): Promise<QueryAnalysis> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    // Fallback to basic pattern matching if no Anthropic key
+  if (!process.env.OPENAI_API_KEY) {
+    // Fallback to basic pattern matching if no OpenAI key
     return fallbackAnalysis(query);
   }
 
@@ -49,8 +49,8 @@ Examples:
 
 Return ONLY the JSON object, no other text.`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+    const response = await openai.chat.completions.create({
+      model: 'o4-mini-2025-04-16',
       max_tokens: 500,
       temperature: 0.1,
       messages: [
@@ -61,17 +61,17 @@ Return ONLY the JSON object, no other text.`;
       ]
     });
 
-    const content = response.content[0];
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type from Claude');
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No response content from OpenAI');
     }
 
     // Parse the JSON response
-    const analysis = JSON.parse(content.text);
+    const analysis = JSON.parse(content);
     
     // Validate the response structure
     if (!analysis.intent || !Array.isArray(analysis.companies)) {
-      throw new Error('Invalid response structure from Claude');
+      throw new Error('Invalid response structure from OpenAI');
     }
 
     return analysis;
@@ -144,7 +144,7 @@ function fallbackAnalysis(query: string): QueryAnalysis {
 }
 
 export async function generateResponse(analysis: QueryAnalysis, data: any): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     return fallbackResponse(analysis, data);
   }
 
@@ -166,8 +166,8 @@ You are a helpful financial data assistant. Please provide a clear, conversation
 
 Keep the response concise but informative (2-3 sentences maximum). If asking about 2024 data but only 2022 data exists, explain this clearly.`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+    const response = await openai.chat.completions.create({
+      model: 'o4-mini-2025-04-16',
       max_tokens: 300,
       temperature: 0.3,
       messages: [
@@ -178,12 +178,12 @@ Keep the response concise but informative (2-3 sentences maximum). If asking abo
       ]
     });
 
-    const content = response.content[0];
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type from Claude');
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No response content from OpenAI');
     }
 
-    return content.text || fallbackResponse(analysis, data);
+    return content || fallbackResponse(analysis, data);
 
   } catch (error) {
     console.error('AI response generation error:', error);
