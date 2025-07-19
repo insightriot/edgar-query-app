@@ -122,11 +122,24 @@ export async function getFinancialMetrics(cik: string, concept: string = 'Revenu
   try {
     const facts = await getCompanyFacts(cik);
     
-    if (!facts.facts || !facts.facts['us-gaap'] || !facts.facts['us-gaap'][concept]) {
+    if (!facts.facts || !facts.facts['us-gaap']) {
       return null;
     }
     
-    const conceptData = facts.facts['us-gaap'][concept];
+    // Try multiple common revenue concept names
+    const revenueConcepts = ['Revenues', 'Revenue', 'SalesRevenueNet', 'RevenueFromContractWithCustomerExcludingAssessedTax'];
+    let actualConcept = concept;
+    
+    if (concept === 'Revenues' || concept.toLowerCase().includes('revenue')) {
+      actualConcept = revenueConcepts.find(c => facts.facts['us-gaap'][c]) || concept;
+    }
+    
+    if (!facts.facts['us-gaap'][actualConcept]) {
+      console.log(`Available concepts for ${facts.entityName}:`, Object.keys(facts.facts['us-gaap']).filter(k => k.toLowerCase().includes('revenue')));
+      return null;
+    }
+    
+    const conceptData = facts.facts['us-gaap'][actualConcept];
     const units = Object.keys(conceptData.units)[0]; // Usually 'USD'
     
     if (!conceptData.units[units]) {
@@ -140,7 +153,7 @@ export async function getFinancialMetrics(cik: string, concept: string = 'Revenu
       .slice(0, 5); // Last 5 years
     
     return {
-      concept,
+      concept: actualConcept,
       unit: units,
       data: annualData,
       company: {

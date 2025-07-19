@@ -183,7 +183,9 @@ async function processQueryWithAI(queryText: string, analysis: any): Promise<any
       // Check if we can get live SEC data
       if (analysis.intent === 'financial_metrics') {
         try {
-          const liveData = await getFinancialMetrics(primaryCompany, analysis.metrics[0] || 'Revenues');
+          // First get company info to get CIK
+          const companyInfo = await searchCompaniesByTicker(primaryCompany);
+          const liveData = await getFinancialMetrics(companyInfo.cik, analysis.metrics[0] || 'Revenues');
           if (liveData) {
             const aiResponse = await generateResponse(analysis, liveData);
             return {
