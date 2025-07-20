@@ -27,7 +27,7 @@ export class UniversalEdgarEngine {
       console.log('Step 1: Parsing query...');
       const universalQuery = await this.queryParser.parse(naturalLanguageQuery);
       
-      if (universalQuery.confidence < 0.3) {
+      if (universalQuery.confidence < 0.1) {
         console.warn('Low confidence in query parsing:', universalQuery.confidence);
         return this.generateLowConfidenceResponse(naturalLanguageQuery, universalQuery);
       }

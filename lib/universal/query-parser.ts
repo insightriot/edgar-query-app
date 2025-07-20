@@ -314,12 +314,33 @@ Return JSON:
       });
     }
 
+    // Filing type detection
+    const filingTypes: any[] = [];
+    if (/filing|10-k|10-q|8-k|document/i.test(query)) {
+      filingTypes.push({
+        formType: 'ALL',
+        description: 'SEC Filings',
+        category: 'periodic',
+        confidence: 0.9
+      });
+    }
+
+    // Time range detection
+    const timeRanges: any[] = [];
+    if (/last|recent|latest|past/i.test(query)) {
+      timeRanges.push({
+        description: 'recent',
+        period: 'latest',
+        confidence: 0.8
+      });
+    }
+
     return {
       companies,
       concepts,
-      timeRanges: [],
+      timeRanges,
       metrics: [],
-      filingTypes: [],
+      filingTypes,
       amounts: [],
       people: [],
       locations: []
@@ -331,14 +352,14 @@ Return JSON:
     
     let primary: PrimaryIntent = 'business_overview';
     
-    if (/what.*business|what.*do|what.*company/i.test(query)) {
+    if (/filing|10-k|10-q|8-k|document|last.*filing/i.test(query)) {
+      primary = 'filing_lookup';
+    } else if (/what.*business|what.*do|what.*company/i.test(query)) {
       primary = 'business_overview';
     } else if (/revenue|profit|income|financial/i.test(query)) {
       primary = 'financial_metrics';
     } else if (/compare|versus|vs\b/i.test(query)) {
       primary = 'comparative_analysis';
-    } else if (/filing|10-k|10-q|8-k/i.test(query)) {
-      primary = 'filing_lookup';
     }
 
     return {

@@ -72,6 +72,11 @@ export class KnowledgeSynthesizer {
   }
 
   private async generateNarrative(query: UniversalQuery, knowledge: KnowledgeSet): Promise<string> {
+    // Handle simple filing lookup queries directly without AI
+    if (query.intent.primary === 'filing_lookup' && knowledge.companies.length > 0) {
+      return this.generateFilingLookupResponse(query, knowledge);
+    }
+    
     // Prepare context for AI narrative generation
     const context = this.prepareKnowledgeContext(knowledge);
     
@@ -501,6 +506,45 @@ Generate a comprehensive response:`;
 
     const company = knowledge.companies[0];
     return `Based on available SEC filing data for ${company.identity.name}: ${company.business.description}. Additional analysis was limited due to data extraction constraints.`;
+  }
+
+  private generateFilingLookupResponse(query: UniversalQuery, knowledge: KnowledgeSet): string {
+    const company = knowledge.companies[0];
+    const companyName = company.identity.name;
+    
+    if (!company.filings || company.filings.length === 0) {
+      return `I could not find recent SEC filings for ${companyName}. This may be due to API limitations or the company may not have recent filings available.`;
+    }
+
+    // Extract number from query if specified (e.g., "last 3 filings")
+    const numberMatch = query.originalQuery.match(/(\d+)/);
+    const requestedCount = numberMatch ? parseInt(numberMatch[1]) : 5;
+    const filings = company.filings.slice(0, requestedCount);
+
+    let response = `Here are the ${requestedCount === filings.length ? requestedCount : filings.length} most recent SEC filings for ${companyName}:\n\n`;
+
+    filings.forEach((filing, index) => {
+      const filingDate = new Date(filing.filingDate).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      
+      response += `${index + 1}. **${filing.form}** - Filed on ${filingDate}\n`;
+      response += `   Accession Number: ${filing.accessionNumber}\n`;
+      if (filing.primaryDocument) {
+        response += `   Document: ${filing.primaryDocument}\n`;
+      }
+      response += '\n';
+    });
+
+    response += `These filings are available on the SEC EDGAR database. Each filing type serves a different purpose:\n`;
+    response += `- **10-K**: Annual report with comprehensive business and financial information\n`;
+    response += `- **10-Q**: Quarterly report with unaudited financial statements\n`;
+    response += `- **8-K**: Current report for material events or corporate changes\n`;
+    response += `- **DEF 14A**: Proxy statement for shareholder meetings`;
+
+    return response;
   }
 
   private formatCurrency(amount: number | undefined): string {
