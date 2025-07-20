@@ -85,7 +85,13 @@ async function handleSimpleQuery(queryText: string): Promise<any> {
             day: 'numeric'
           });
           
+          // Generate direct SEC EDGAR URL
+          const paddedCik = company.cik.padStart(10, '0');
+          const cleanAccession = filing.accessionNumber.replace(/-/g, '');
+          const filingUrl = `https://www.sec.gov/Archives/edgar/data/${paddedCik}/${cleanAccession}/${filing.primaryDocument}`;
+          
           narrative += `${index + 1}. **${filing.form}** - Filed on ${filingDate}\n`;
+          narrative += `   📄 **[View Filing](${filingUrl})**\n`;
           narrative += `   Accession Number: ${filing.accessionNumber}\n`;
           if (filing.primaryDocument) {
             narrative += `   Document: ${filing.primaryDocument}\n`;
@@ -93,7 +99,13 @@ async function handleSimpleQuery(queryText: string): Promise<any> {
           narrative += '\n';
         });
         
-        narrative += `These filings are available on the SEC EDGAR database.`;
+        narrative += `🔗 **[Browse All ${company.name} Filings](https://www.sec.gov/edgar/browse/?CIK=${company.cik.padStart(10, '0')}&owner=exclude)**`;
+        
+        // Also add URLs to the filings data
+        const filingsWithUrls = filings.slice(0, count).map(filing => ({
+          ...filing,
+          url: `https://www.sec.gov/Archives/edgar/data/${company.cik.padStart(10, '0')}/${filing.accessionNumber.replace(/-/g, '')}/${filing.primaryDocument}`
+        }));
         
         return {
           type: 'filing_list',
@@ -103,7 +115,7 @@ async function handleSimpleQuery(queryText: string): Promise<any> {
             ticker: company.ticker,
             cik: company.cik
           },
-          filings: filings.slice(0, count),
+          filings: filingsWithUrls,
           source: 'sec_edgar_direct',
           timestamp: new Date().toISOString()
         };

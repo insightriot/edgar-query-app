@@ -329,15 +329,30 @@ export class KnowledgeExtractionEngine {
     
     const recentFilings = [];
     for (let i = 0; i < Math.min(5, filings.accessionNumber.length); i++) {
+      const accessionNumber = filings.accessionNumber[i];
+      const primaryDocument = filings.primaryDocument[i];
+      
       recentFilings.push({
-        accessionNumber: filings.accessionNumber[i],
+        accessionNumber,
         form: filings.form[i],
         filingDate: filings.filingDate[i],
-        primaryDocument: filings.primaryDocument[i]
+        primaryDocument,
+        // Generate direct SEC EDGAR URL
+        url: this.generateSecEdgarUrl(cik, accessionNumber, primaryDocument),
+        // Generate browse URL for the filing
+        browseUrl: `https://www.sec.gov/edgar/browse/?CIK=${cik.padStart(10, '0')}&owner=exclude`
       });
     }
     
     return recentFilings;
+  }
+
+  private generateSecEdgarUrl(cik: string, accessionNumber: string, primaryDocument: string): string {
+    // Format: https://www.sec.gov/Archives/edgar/data/CIK/ACCESSION-NUMBER-NO-DASHES/PRIMARY-DOCUMENT
+    const paddedCik = cik.padStart(10, '0');
+    const cleanAccession = accessionNumber.replace(/-/g, '');
+    
+    return `https://www.sec.gov/Archives/edgar/data/${paddedCik}/${cleanAccession}/${primaryDocument}`;
   }
 
   // Content extraction methods - actual SEC filing parsing

@@ -240,8 +240,50 @@ function App() {
                   {result.success ? (
                     <div>
                       <div className="result-message" style={{ fontSize: '16px', lineHeight: '1.6', marginBottom: '1rem', whiteSpace: 'pre-wrap' }}>
-                        {formatResponse(result.data)}
+                        <div dangerouslySetInnerHTML={{ __html: formatResponse(result.data).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">$1</a>') }} />
                       </div>
+                      
+                      {/* Source Links Section */}
+                      {(result.data.answer?.citations?.length > 0 || result.data.results?.filings?.length > 0) && (
+                        <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                          <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '14px', fontWeight: '600', color: '#495057' }}>📚 Sources & References</h4>
+                          
+                          {/* Universal EDGAR Engine Citations */}
+                          {result.data.answer?.citations?.map((citation, index) => (
+                            <div key={index} style={{ marginBottom: '0.5rem', fontSize: '13px' }}>
+                              {citation.url ? (
+                                <a href={citation.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc', textDecoration: 'none' }}>
+                                  📄 {citation.source.name}
+                                </a>
+                              ) : (
+                                <span>📄 {citation.source.name}</span>
+                              )}
+                              {citation.filing && (
+                                <span style={{ color: '#6c757d', marginLeft: '0.5rem' }}>
+                                  (Accession: {citation.filing.accessionNumber})
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                          
+                          {/* Simple Filing Handler Results */}
+                          {result.data.results?.filings?.map((filing, index) => (
+                            <div key={index} style={{ marginBottom: '0.5rem', fontSize: '13px' }}>
+                              {filing.url ? (
+                                <a href={filing.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc', textDecoration: 'none' }}>
+                                  📄 {filing.form} - {filing.filingDate}
+                                </a>
+                              ) : (
+                                <span>📄 {filing.form} - {filing.filingDate}</span>
+                              )}
+                              <span style={{ color: '#6c757d', marginLeft: '0.5rem' }}>
+                                (Accession: {filing.accessionNumber})
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
                       <details style={{ marginTop: '1rem', fontSize: '14px', color: '#666' }}>
                         <summary style={{ cursor: 'pointer', marginBottom: '0.5rem' }}>Technical Details</summary>
                         <div className="result-message">

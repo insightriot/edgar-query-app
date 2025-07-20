@@ -106,12 +106,14 @@ REQUIREMENTS:
 8. If comparing companies, provide balanced analysis
 9. If analyzing trends, explain the trajectory and implications
 10. Maintain professional, analytical tone
+11. IMPORTANT: Reference specific SEC filings when citing data (e.g., "According to Tesla's 10-K filed on [date]...")
 
 RESPONSE FORMAT:
 - Start with a direct answer to the main question
-- Provide supporting details and context
-- Include specific data points and metrics
+- Provide supporting details and context with filing references
+- Include specific data points and metrics with sources
 - End with implications or significance
+- Note: Source links will be provided separately, focus on clear attribution in text
 
 Generate a comprehensive response:`;
 
@@ -304,13 +306,20 @@ Generate a comprehensive response:`;
   private generateCitations(knowledge: KnowledgeSet): Citation[] {
     const citations: Citation[] = [];
 
-    // Add company data sources
+    // Add company data sources with direct filing links
     knowledge.companies.forEach(company => {
       company.filings.forEach(filing => {
+        const paddedCik = company.identity.cik.padStart(10, '0');
+        const cleanAccession = filing.accessionNumber.replace(/-/g, '');
+        
+        // Generate direct filing URL
+        const filingUrl = filing.url || 
+          `https://www.sec.gov/Archives/edgar/data/${paddedCik}/${cleanAccession}/${filing.primaryDocument}`;
+        
         citations.push({
           source: {
             type: 'sec_filing',
-            name: `${company.identity.name} ${filing.form}`,
+            name: `${company.identity.name} ${filing.form} (${filing.filingDate})`,
             timestamp: new Date(filing.filingDate),
             reliability: 1.0,
             isOfficial: true
@@ -318,16 +327,19 @@ Generate a comprehensive response:`;
           filing: {
             accessionNumber: filing.accessionNumber,
             formType: filing.form,
-            filingDate: new Date(filing.filingDate)
+            filingDate: new Date(filing.filingDate),
+            section: filing.form === '10-K' ? 'Item 1 - Business' : undefined,
+            item: filing.form === '8-K' ? 'Current Report' : undefined
           },
-          url: `https://www.sec.gov/edgar/browse/?CIK=${company.identity.cik}`,
+          content: `SEC Filing: ${filing.form} filed on ${filing.filingDate}`,
+          url: filingUrl,
           confidence: 0.95,
           relevance: 0.9
         });
       });
     });
 
-    // Add XBRL data sources
+    // Add XBRL data sources with company links
     knowledge.sources.forEach(source => {
       citations.push({
         source,
@@ -530,7 +542,14 @@ Generate a comprehensive response:`;
         day: 'numeric' 
       });
       
+      // Generate direct SEC EDGAR URL if not already present
+      const paddedCik = company.identity.cik.padStart(10, '0');
+      const cleanAccession = filing.accessionNumber.replace(/-/g, '');
+      const filingUrl = filing.url || 
+        `https://www.sec.gov/Archives/edgar/data/${paddedCik}/${cleanAccession}/${filing.primaryDocument}`;
+      
       response += `${index + 1}. **${filing.form}** - Filed on ${filingDate}\n`;
+      response += `   📄 **[View Filing](${filingUrl})**\n`;
       response += `   Accession Number: ${filing.accessionNumber}\n`;
       if (filing.primaryDocument) {
         response += `   Document: ${filing.primaryDocument}\n`;
@@ -538,11 +557,13 @@ Generate a comprehensive response:`;
       response += '\n';
     });
 
-    response += `These filings are available on the SEC EDGAR database. Each filing type serves a different purpose:\n`;
+    response += `**📋 Filing Type Guide:**\n`;
     response += `- **10-K**: Annual report with comprehensive business and financial information\n`;
     response += `- **10-Q**: Quarterly report with unaudited financial statements\n`;
     response += `- **8-K**: Current report for material events or corporate changes\n`;
-    response += `- **DEF 14A**: Proxy statement for shareholder meetings`;
+    response += `- **DEF 14A**: Proxy statement for shareholder meetings\n\n`;
+
+    response += `🔗 **[Browse All ${companyName} Filings](https://www.sec.gov/edgar/browse/?CIK=${company.identity.cik.padStart(10, '0')}&owner=exclude)**`;
 
     return response;
   }
