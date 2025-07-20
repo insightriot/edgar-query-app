@@ -1,8 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../lib/database';
 import { get, set } from '../lib/redis';
-import { analyzeQuery, generateResponse } from '../lib/ai-query-processor';
-import { searchCompaniesByTicker, getFinancialMetrics, getRecentFilings, getLatestEarningsRelease } from '../lib/sec-edgar-live';
+import { UniversalEdgarEngine } from '../lib/universal/universal-edgar-engine';
 
 // Load environment variables for Vercel (always try to load .env.local)
 try {
@@ -69,45 +68,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const startTime = Date.now();
 
-    // AI-enhanced query analysis
-    console.log('=== QUERY PROCESSING DEBUG ===');
+    // Initialize Universal EDGAR Engine
+    console.log('=== UNIVERSAL EDGAR ENGINE ===');
     console.log('Query:', queryText);
     console.log('Environment check - OpenAI Key:', process.env.OPENAI_API_KEY ? 'Present' : 'Missing');
     console.log('Environment check - Database URL:', process.env.DATABASE_URL ? 'Present' : 'Missing');
     console.log('Environment check - SEC User Agent:', process.env.SEC_API_USER_AGENT ? 'Present' : 'Missing');
     
-    const analysis = await analyzeQuery(queryText);
-    console.log('AI Analysis Result:', JSON.stringify(analysis, null, 2));
-
+    const universalEngine = new UniversalEdgarEngine();
+    
     // Log query to database
     try {
       await query(
         'INSERT INTO query_history (query_text, query_type, intent, entities, ip_address, user_agent) VALUES ($1, $2, $3, $4, $5, $6)',
-        [queryText, 'ai_enhanced', analysis.intent, JSON.stringify(analysis), ip, req.headers['user-agent']]
+        [queryText, 'universal_edgar', 'universal', JSON.stringify({ query: queryText }), ip, req.headers['user-agent']]
       );
     } catch (dbError) {
       console.error('Failed to log query:', dbError);
       // Continue processing even if logging fails
     }
 
-    // Process query with AI + live SEC data
-    console.log('=== STARTING AI PROCESSING ===');
-    let results;
+    // Process query with Universal EDGAR Engine
+    let universalAnswer;
     try {
-      results = await processQueryWithAI(queryText, analysis);
-      console.log('AI Processing Success:', results?.type || 'unknown');
+      universalAnswer = await universalEngine.processQuery(queryText);
+      console.log('Universal Engine Success:', {
+        confidence: universalAnswer.assessment.confidence,
+        processingTime: universalAnswer.metadata.processingTimeMs
+      });
     } catch (error) {
-      console.error('AI Processing Failed:', error.message);
+      console.error('Universal Engine Failed:', error.message);
       console.error('Error Details:', error);
-      results = {
-        type: 'error_response',
-        message: `Unable to process query at this time. Analysis: ${analysis.explanation}`,
-        timestamp: new Date().toISOString(),
+      
+      // Generate fallback error response
+      universalAnswer = {
+        narrative: `I encountered an error processing your query "${queryText}". Please try again or rephrase your question.`,
+        data: {},
+        citations: [],
+        assessment: {
+          confidence: 0.1,
+          completeness: 0.0,
+          limitations: ['System error occurred'],
+          assumptions: [],
+          dataFreshness: {
+            overall_age_days: 0,
+            oldest_data_date: new Date(),
+            newest_data_date: new Date(),
+            has_realtime_data: false,
+            coverage_gaps: []
+          },
+          bias_risks: []
+        },
+        followUp: {
+          suggested_queries: ['Try rephrasing your question', 'Check company names are correct'],
+          related_topics: [],
+          deeper_analysis: [],
+          comparison_opportunities: []
+        },
         metadata: {
-          processingTime: Date.now() - startTime,
-          source: 'ai-enhanced-vercel',
-          error: error.message,
-          analysis
+          queryId: `error_${Date.now()}`,
+          timestamp: new Date(),
+          processingTimeMs: Date.now() - startTime,
+          sources: [],
+          complexity: 'simple',
+          confidence: 0.1
         }
       };
     }
@@ -115,11 +139,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const response = {
       success: true,
       data: {
-        queryId: Date.now().toString(),
+        queryId: universalAnswer.metadata.queryId,
         status: 'completed',
         query: queryText,
-        analysis,
-        results
+        answer: universalAnswer,
+        // Legacy format for backward compatibility
+        results: {
+          type: 'universal_answer',
+          narrative: universalAnswer.narrative,
+          data: universalAnswer.data,
+          citations: universalAnswer.citations,
+          assessment: universalAnswer.assessment,
+          source: 'universal_edgar_engine',
+          timestamp: universalAnswer.metadata.timestamp
+        }
       }
     };
 
@@ -130,422 +163,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: 'Internal server error',
       statusCode: 500
     });
-  }
-}
-
-function classifyIntent(query: string): string {
-  const lowerQuery = query.toLowerCase();
-  
-  if (lowerQuery.includes('revenue') || lowerQuery.includes('sales') || lowerQuery.includes('income')) {
-    return 'financial_metrics';
-  }
-  if (lowerQuery.includes('filing') || lowerQuery.includes('10-k') || lowerQuery.includes('10-q') || lowerQuery.includes('8-k')) {
-    return 'sec_filings';
-  }
-  if (lowerQuery.includes('about') || lowerQuery.includes('business') || lowerQuery.includes('company')) {
-    return 'company_info';
-  }
-  if (lowerQuery.includes('stock') || lowerQuery.includes('price') || lowerQuery.includes('market')) {
-    return 'market_data';
-  }
-  
-  return 'general_query';
-}
-
-function extractEntities(query: string): string[] {
-  const entities: string[] = [];
-  const companies = [
-    'apple', 'microsoft', 'google', 'amazon', 'tesla', 'meta', 'netflix', 
-    'nvidia', 'salesforce', 'adobe', 'intel', 'oracle', 'cisco', 'ibm'
-  ];
-  
-  const lowerQuery = query.toLowerCase();
-  
-  companies.forEach(company => {
-    if (lowerQuery.includes(company)) {
-      entities.push(company.charAt(0).toUpperCase() + company.slice(1));
-    }
-  });
-  
-  // Extract years
-  const yearMatch = query.match(/\b(20\d{2})\b/g);
-  if (yearMatch) {
-    entities.push(...yearMatch);
-  }
-  
-  // Extract quarters
-  const quarterMatch = query.match(/\b(Q[1-4])\b/gi);
-  if (quarterMatch) {
-    entities.push(...quarterMatch);
-  }
-  
-  return entities;
-}
-
-async function processQueryWithAI(queryText: string, analysis: any): Promise<any> {
-  const startTime = Date.now();
-  
-  console.log('=== PROCESS QUERY WITH AI ===');
-  console.log('Analysis Intent:', analysis.intent);
-  console.log('Companies Found:', analysis.companies);
-  console.log('Metrics Found:', analysis.metrics);
-  
-  try {
-    // Try to get live SEC data if companies are identified
-    if (analysis.companies.length > 0) {
-      const primaryCompany = analysis.companies[0];
-      console.log('Primary Company:', primaryCompany);
-      
-      // Check if we can get live SEC data
-      if (analysis.intent === 'financial_metrics') {
-        console.log('=== ATTEMPTING LIVE SEC DATA ===');
-        try {
-          // First get company info to get CIK
-          console.log('Step 1: Getting company info for:', primaryCompany);
-          const companyInfo = await searchCompaniesByTicker(primaryCompany);
-          console.log('Company Info Retrieved:', companyInfo);
-          
-          // Step 2: Check for recent earnings release (8-K) first
-          console.log('Step 2a: Checking for recent earnings release');
-          const earningsRelease = await getLatestEarningsRelease(companyInfo.cik);
-          console.log('Earnings Release Found:', earningsRelease ? 'Yes' : 'No');
-          
-          if (earningsRelease) {
-            console.log('Step 2b: Using earnings release data');
-            const aiResponse = await generateResponse(analysis, {
-              type: 'earnings_release',
-              filing: earningsRelease.filing,
-              documentUrl: earningsRelease.documentUrl,
-              filingDate: earningsRelease.filingDate,
-              company: companyInfo
-            });
-            
-            return {
-              type: 'live_earnings_data',
-              company: companyInfo,
-              filing: earningsRelease.filing,
-              documentUrl: earningsRelease.documentUrl,
-              ai_response: aiResponse,
-              source: 'live_sec_8k',
-              timestamp: new Date().toISOString()
-            };
-          }
-          
-          // Step 3: Fall back to XBRL financial metrics
-          console.log('Step 3: Getting XBRL financial metrics for CIK:', companyInfo.cik);
-          const liveData = await getFinancialMetrics(companyInfo.cik, analysis.metrics[0] || 'Revenues');
-          console.log('Financial Data Retrieved:', liveData ? 'Success' : 'Failed');
-          
-          if (liveData) {
-            console.log('Step 4: Generating AI response');
-            const aiResponse = await generateResponse(analysis, liveData);
-            console.log('AI Response Generated:', aiResponse ? 'Success' : 'Failed');
-            
-            return {
-              type: 'live_financial_data',
-              company: liveData.company,
-              metric: liveData.concept,
-              data: liveData.data,
-              ai_response: aiResponse,
-              source: 'live_sec_edgar',
-              timestamp: new Date().toISOString()
-            };
-          }
-        } catch (secError) {
-          console.error('Live SEC API failed:', secError.message);
-          console.error('SEC Error Details:', secError);
-        }
-      }
-      
-      if (analysis.intent === 'company_info') {
-        try {
-          const liveData = await searchCompaniesByTicker(primaryCompany);
-          if (liveData) {
-            const aiResponse = await generateResponse(analysis, liveData);
-            return {
-              type: 'live_company_profile',
-              company: {
-                name: liveData.name,
-                cik: liveData.cik,
-                sic: liveData.sic,
-                sicDescription: liveData.sicDescription,
-                category: liveData.category,
-                fiscalYearEnd: liveData.fiscalYearEnd
-              },
-              ai_response: aiResponse,
-              source: 'live_sec_edgar',
-              timestamp: new Date().toISOString()
-            };
-          }
-        } catch (secError) {
-          console.log('Live SEC API failed, falling back to database:', secError.message);
-        }
-      }
-      
-      if (analysis.intent === 'sec_filings') {
-        console.log('=== ATTEMPTING SEC FILINGS SEARCH ===');
-        try {
-          // Get company info first
-          console.log('Step 1: Getting company info for filings search:', primaryCompany);
-          const companyInfo = await searchCompaniesByTicker(primaryCompany);
-          console.log('Company Info Retrieved:', companyInfo);
-          
-          // Get recent filings
-          console.log('Step 2: Getting recent filings for CIK:', companyInfo.cik);
-          const recentFilings = await getRecentFilings(companyInfo.cik, 5);
-          console.log('Recent Filings Retrieved:', recentFilings.length, 'filings');
-          
-          if (recentFilings.length > 0) {
-            console.log('Step 3: Generating AI response for filings');
-            const aiResponse = await generateResponse(analysis, {
-              type: 'recent_filings',
-              company: companyInfo,
-              filings: recentFilings
-            });
-            
-            return {
-              type: 'live_recent_filings',
-              company: companyInfo,
-              filings: recentFilings,
-              ai_response: aiResponse,
-              source: 'live_sec_filings',
-              timestamp: new Date().toISOString()
-            };
-          }
-        } catch (secError) {
-          console.error('SEC filings search failed:', secError.message);
-          console.error('SEC Error Details:', secError);
-        }
-      }
-    }
-    
-    // Fallback to database processing
-    console.log('=== FALLING BACK TO DATABASE ===');
-    console.log('Reason: Live SEC data unavailable or failed');
-    return await processQueryWithDatabase(queryText, analysis.intent, analysis.companies);
-    
-  } catch (error) {
-    console.error('AI processing error:', error);
-    
-    // Final fallback
-    const aiResponse = await generateResponse(analysis, { error: error.message });
-    return {
-      type: 'ai_response',
-      message: aiResponse,
-      analysis,
-      timestamp: new Date().toISOString(),
-      metadata: {
-        processingTime: Date.now() - startTime,
-        source: 'ai-fallback'
-      }
-    };
-  }
-}
-
-async function processQueryWithDatabase(queryText: string, intent: string, entities: string[]): Promise<any> {
-  const startTime = Date.now();
-  
-  console.log('=== DATABASE PROCESSING ===');
-  console.log('Intent:', intent);
-  console.log('Entities:', entities);
-  
-  // Extract company from entities
-  const companyName = entities.find(entity => 
-    !entity.match(/^\d{4}$/) && !entity.match(/^Q[1-4]$/i)
-  );
-  console.log('Extracted Company Name:', companyName);
-
-  switch (intent) {
-    case 'company_info':
-      console.log('Database: Getting company info');
-      return await getCompanyInfo(companyName);
-    
-    case 'financial_metrics':
-      console.log('Database: Getting financial metrics');
-      return await getFinancialMetricsFromDatabase(companyName, queryText);
-    
-    case 'sec_filings':
-      console.log('Database: Getting SEC filings');
-      return await getSecFilings(companyName, queryText);
-    
-    default:
-      console.log('Database: Default general response');
-      return {
-        type: 'general_response',
-        message: `I understand you're asking about: ${queryText}. ${companyName ? `Company: ${companyName}` : 'No specific company identified.'}`,
-        intent,
-        entities,
-        timestamp: new Date().toISOString(),
-        metadata: {
-          processingTime: Date.now() - startTime,
-          source: 'database-integrated'
-        }
-      };
-  }
-}
-
-async function getCompanyInfo(companyName?: string): Promise<any> {
-  if (!companyName) {
-    return {
-      type: 'error_response',
-      message: 'Please specify a company name to get company information.',
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  try {
-    // Search for company in database
-    const result = await query(
-      'SELECT * FROM companies WHERE LOWER(name) LIKE LOWER($1) OR LOWER(ticker) = LOWER($2) LIMIT 1',
-      [`%${companyName}%`, companyName]
-    );
-
-    if (result.rows.length === 0) {
-      return {
-        type: 'no_results',
-        message: `No company found matching "${companyName}". The company may not be in our database yet.`,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    const company = result.rows[0];
-    
-    // Get recent filings
-    const filingsResult = await query(
-      'SELECT * FROM filings WHERE cik = $1 ORDER BY filing_date DESC LIMIT 5',
-      [company.cik]
-    );
-
-    return {
-      type: 'company_profile',
-      company,
-      recent_filings: filingsResult.rows,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    console.error('Company info query error:', error);
-    throw error;
-  }
-}
-
-async function getFinancialMetricsFromDatabase(companyName?: string, queryText?: string): Promise<any> {
-  if (!companyName) {
-    return {
-      type: 'error_response',
-      message: 'Please specify a company name to get financial metrics.',
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  try {
-    // Find company
-    const companyResult = await query(
-      'SELECT * FROM companies WHERE LOWER(name) LIKE LOWER($1) OR LOWER(ticker) = LOWER($2) LIMIT 1',
-      [`%${companyName}%`, companyName]
-    );
-
-    if (companyResult.rows.length === 0) {
-      return {
-        type: 'no_results',
-        message: `No company found matching "${companyName}".`,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    const company = companyResult.rows[0];
-    
-    // Determine metric based on query text
-    let concept = 'Revenue';
-    if (queryText?.toLowerCase().includes('revenue') || queryText?.toLowerCase().includes('sales')) {
-      concept = 'Revenue';
-    } else if (queryText?.toLowerCase().includes('profit') || queryText?.toLowerCase().includes('income')) {
-      concept = 'NetIncomeLoss';
-    }
-
-    // Get financial data
-    const financialResult = await query(
-      'SELECT * FROM financial_data WHERE cik = $1 AND concept LIKE $2 ORDER BY fiscal_year DESC, fiscal_period DESC LIMIT 8',
-      [company.cik, `%${concept}%`]
-    );
-
-    return {
-      type: 'financial_data',
-      company,
-      metric: concept,
-      data: financialResult.rows,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    console.error('Financial metrics query error:', error);
-    throw error;
-  }
-}
-
-async function getSecFilings(companyName?: string, queryText?: string): Promise<any> {
-  if (!companyName) {
-    return {
-      type: 'error_response',
-      message: 'Please specify a company name to get SEC filings.',
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  try {
-    // Find company
-    const companyResult = await query(
-      'SELECT * FROM companies WHERE LOWER(name) LIKE LOWER($1) OR LOWER(ticker) = LOWER($2) LIMIT 1',
-      [`%${companyName}%`, companyName]
-    );
-
-    if (companyResult.rows.length === 0) {
-      return {
-        type: 'no_results',
-        message: `No company found matching "${companyName}".`,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    const company = companyResult.rows[0];
-    
-    // Use analysis filing types if available, otherwise fall back to text matching
-    let formFilter = '';
-    if (analysis.filingTypes && analysis.filingTypes.length > 0) {
-      formFilter = analysis.filingTypes[0]; // Use the first matched filing type
-    } else {
-      // Fallback to basic text matching
-      if (queryText?.toLowerCase().includes('10-k')) {
-        formFilter = '10-K';
-      } else if (queryText?.toLowerCase().includes('10-q')) {
-        formFilter = '10-Q';
-      } else if (queryText?.toLowerCase().includes('8-k')) {
-        formFilter = '8-K';
-      } else if (queryText?.toLowerCase().includes('comment letter')) {
-        formFilter = 'COMMENT';
-      }
-    }
-
-    // Get filings
-    let filingsQuery = 'SELECT * FROM filings WHERE cik = $1';
-    const params = [company.cik];
-    
-    if (formFilter) {
-      filingsQuery += ' AND form = $2';
-      params.push(formFilter);
-    }
-    
-    filingsQuery += ' ORDER BY filing_date DESC LIMIT 20';
-
-    const filingsResult = await query(filingsQuery, params);
-
-    return {
-      type: 'filing_search',
-      company,
-      form_filter: formFilter,
-      filings: filingsResult.rows,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    console.error('SEC filings query error:', error);
-    throw error;
   }
 }
