@@ -249,7 +249,7 @@ function App() {
                           <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '14px', fontWeight: '600', color: '#495057' }}>📚 Sources & References</h4>
                           
                           {/* Universal EDGAR Engine Citations */}
-                          {result.data.answer?.citations?.map((citation, index) => (
+                          {result.data.answer?.citations?.map((citation: any, index: number) => (
                             <div key={index} style={{ marginBottom: '0.5rem', fontSize: '13px' }}>
                               {citation.url ? (
                                 <a href={citation.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc', textDecoration: 'none' }}>
@@ -267,7 +267,7 @@ function App() {
                           ))}
                           
                           {/* Simple Filing Handler Results */}
-                          {result.data.results?.filings?.map((filing, index) => (
+                          {result.data.results?.filings?.map((filing: any, index: number) => (
                             <div key={index} style={{ marginBottom: '0.5rem', fontSize: '13px' }}>
                               {filing.url ? (
                                 <a href={filing.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc', textDecoration: 'none' }}>
