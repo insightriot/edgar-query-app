@@ -343,26 +343,6 @@ function App() {
             </div>
           )}
 
-          {/* Status */}
-          <div className="card">
-            <div className="card-header">System Status</div>
-            <div className="card-body">
-              <div className="result-status success">
-                <span>🟢</span>
-                <span>
-                  Backend API: Connected (
-                  <a href="http://localhost:3000/health" target="_blank" rel="noopener noreferrer">
-                    Test Health
-                  </a>
-                  )
-                </span>
-              </div>
-              <div className="result-message">
-                <strong>Demo Mode:</strong> Currently running with test responses.
-                Connect PostgreSQL and Redis for full SEC EDGAR integration.
-              </div>
-            </div>
-          </div>
         </div>
       </main>
     </div>
