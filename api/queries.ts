@@ -35,6 +35,88 @@ async function rateLimit(ip: string, maxRequests = 10, windowMs = 60000): Promis
   }
 }
 
+// Simple, direct query handler for basic requests
+async function handleSimpleQuery(queryText: string): Promise<any> {
+  const lowerQuery = queryText.toLowerCase();
+  
+  // Extract company name
+  let companyName = '';
+  const companyPatterns = [
+    { pattern: /\btesla\b/gi, name: 'Tesla', ticker: 'TSLA', cik: '0001318605' },
+    { pattern: /\bapple\b/gi, name: 'Apple', ticker: 'AAPL', cik: '0000320193' },
+    { pattern: /\bmicrosoft\b/gi, name: 'Microsoft', ticker: 'MSFT', cik: '0000789019' },
+    { pattern: /\bgoogle\b|alphabet/gi, name: 'Alphabet', ticker: 'GOOGL', cik: '0001652044' },
+    { pattern: /\bamazon\b/gi, name: 'Amazon', ticker: 'AMZN', cik: '0001018724' },
+    { pattern: /\bmeta\b|facebook/gi, name: 'Meta', ticker: 'META', cik: '0001326801' }
+  ];
+  
+  let company = null;
+  for (const pattern of companyPatterns) {
+    if (pattern.pattern.test(queryText)) {
+      company = pattern;
+      break;
+    }
+  }
+  
+  if (!company) {
+    return null; // Can't handle without a recognized company
+  }
+  
+  // Handle filing requests
+  if (/filing|10-k|10-q|8-k|document/i.test(queryText)) {
+    try {
+      // Import the SEC functions
+      const { getRecentFilings } = await import('../lib/sec-edgar-live');
+      
+      // Extract number if specified
+      const numberMatch = queryText.match(/(\d+)/);
+      const count = numberMatch ? parseInt(numberMatch[1]) : 5;
+      
+      console.log(`Simple handler: Getting ${count} recent filings for ${company.name} (CIK: ${company.cik})`);
+      const filings = await getRecentFilings(company.cik, count);
+      
+      if (filings && filings.length > 0) {
+        let narrative = `Here are the ${Math.min(count, filings.length)} most recent SEC filings for ${company.name}:\n\n`;
+        
+        filings.slice(0, count).forEach((filing, index) => {
+          const filingDate = new Date(filing.filingDate).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+          
+          narrative += `${index + 1}. **${filing.form}** - Filed on ${filingDate}\n`;
+          narrative += `   Accession Number: ${filing.accessionNumber}\n`;
+          if (filing.primaryDocument) {
+            narrative += `   Document: ${filing.primaryDocument}\n`;
+          }
+          narrative += '\n';
+        });
+        
+        narrative += `These filings are available on the SEC EDGAR database.`;
+        
+        return {
+          type: 'filing_list',
+          message: narrative,
+          company: {
+            name: company.name,
+            ticker: company.ticker,
+            cik: company.cik
+          },
+          filings: filings.slice(0, count),
+          source: 'sec_edgar_direct',
+          timestamp: new Date().toISOString()
+        };
+      }
+    } catch (error) {
+      console.error('Simple filing handler failed:', error);
+      return null;
+    }
+  }
+  
+  return null; // Can't handle this type of query simply
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -89,16 +171,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Process query with Universal EDGAR Engine
+    console.log('=== Calling Universal EDGAR Engine ===');
     let universalAnswer;
     try {
       universalAnswer = await universalEngine.processQuery(queryText);
-      console.log('Universal Engine Success:', {
-        confidence: universalAnswer.assessment.confidence,
-        processingTime: universalAnswer.metadata.processingTimeMs
-      });
+      console.log('=== Universal Engine Success ===');
+      console.log('Confidence:', universalAnswer.assessment.confidence);
+      console.log('Processing Time:', universalAnswer.metadata.processingTimeMs);
+      console.log('Narrative Length:', universalAnswer.narrative.length);
+      console.log('Query ID:', universalAnswer.metadata.queryId);
+      console.log('Narrative Preview:', universalAnswer.narrative.substring(0, 200));
     } catch (error) {
-      console.error('Universal Engine Failed:', error.message);
-      console.error('Error Details:', error);
+      console.error('=== Universal Engine Failed ===');
+      console.error('Error Message:', error.message);
+      console.error('Error Stack:', error.stack);
       
       // Generate fallback error response
       universalAnswer = {
@@ -136,16 +222,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
     }
 
+    // Check if we got a meaningful response or should fall back to simple approach
+    const isSuccessfulResponse = universalAnswer.assessment.confidence > 0.5 && 
+                                  universalAnswer.narrative.length > 100 &&
+                                  !universalAnswer.metadata.queryId.startsWith('error_') &&
+                                  !universalAnswer.metadata.queryId.startsWith('low_confidence_');
+
+    if (!isSuccessfulResponse) {
+      console.log('Universal Engine failed, trying simple fallback for:', queryText);
+      // Try simple, direct approach for basic queries
+      try {
+        const simpleResult = await handleSimpleQuery(queryText);
+        if (simpleResult) {
+          return res.status(200).json({
+            success: true,
+            data: {
+              queryId: `simple_${Date.now()}`,
+              status: 'completed',
+              query: queryText,
+              results: simpleResult
+            }
+          });
+        }
+      } catch (simpleError) {
+        console.error('Simple fallback also failed:', simpleError);
+      }
+    }
+
     const response = {
-      success: true,
+      success: isSuccessfulResponse,
       data: {
         queryId: universalAnswer.metadata.queryId,
-        status: 'completed',
+        status: isSuccessfulResponse ? 'completed' : 'failed',
         query: queryText,
         answer: universalAnswer,
         // Legacy format for backward compatibility
         results: {
-          type: 'universal_answer',
+          type: isSuccessfulResponse ? 'universal_answer' : 'error_response',
           narrative: universalAnswer.narrative,
           data: universalAnswer.data,
           citations: universalAnswer.citations,

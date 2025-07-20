@@ -25,7 +25,22 @@ export class UniversalEdgarEngine {
     try {
       // Step 1: Parse the natural language query
       console.log('Step 1: Parsing query...');
-      const universalQuery = await this.queryParser.parse(naturalLanguageQuery);
+      let universalQuery;
+      try {
+        universalQuery = await this.queryParser.parse(naturalLanguageQuery);
+        console.log('Query parsing result:', {
+          confidence: universalQuery.confidence,
+          intent: universalQuery.intent.primary,
+          entities: {
+            companies: universalQuery.entities.companies.length,
+            concepts: universalQuery.entities.concepts.length,
+            filingTypes: universalQuery.entities.filingTypes.length
+          }
+        });
+      } catch (parseError) {
+        console.error('Query parsing failed:', parseError);
+        throw new Error(`Query parsing failed: ${parseError.message}`);
+      }
       
       if (universalQuery.confidence < 0.1) {
         console.warn('Low confidence in query parsing:', universalQuery.confidence);
@@ -34,7 +49,19 @@ export class UniversalEdgarEngine {
 
       // Step 2: Extract relevant knowledge
       console.log('Step 2: Extracting knowledge...');
-      const knowledgeSet = await this.knowledgeExtractor.extractKnowledge(universalQuery);
+      let knowledgeSet;
+      try {
+        knowledgeSet = await this.knowledgeExtractor.extractKnowledge(universalQuery);
+        console.log('Knowledge extraction result:', {
+          confidence: knowledgeSet.confidence,
+          completeness: knowledgeSet.completeness,
+          companies: knowledgeSet.companies.length,
+          filings: knowledgeSet.filings.length
+        });
+      } catch (extractError) {
+        console.error('Knowledge extraction failed:', extractError);
+        throw new Error(`Knowledge extraction failed: ${extractError.message}`);
+      }
       
       if (knowledgeSet.confidence < 0.2) {
         console.warn('Low confidence in knowledge extraction:', knowledgeSet.confidence);
@@ -43,7 +70,18 @@ export class UniversalEdgarEngine {
 
       // Step 3: Synthesize comprehensive answer
       console.log('Step 3: Synthesizing answer...');
-      const answer = await this.synthesizer.synthesizeAnswer(universalQuery, knowledgeSet);
+      let answer;
+      try {
+        answer = await this.synthesizer.synthesizeAnswer(universalQuery, knowledgeSet);
+        console.log('Answer synthesis result:', {
+          narrativeLength: answer.narrative.length,
+          confidence: answer.assessment.confidence,
+          citationsCount: answer.citations.length
+        });
+      } catch (synthesisError) {
+        console.error('Answer synthesis failed:', synthesisError);
+        throw new Error(`Answer synthesis failed: ${synthesisError.message}`);
+      }
       
       // Update processing time
       answer.metadata.processingTimeMs = performance.now() - startTime;
@@ -58,6 +96,7 @@ export class UniversalEdgarEngine {
 
     } catch (error) {
       console.error('Universal EDGAR Engine error:', error);
+      console.error('Error stack:', error.stack);
       return this.generateErrorResponse(naturalLanguageQuery, error);
     }
   }

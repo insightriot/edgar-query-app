@@ -45,74 +45,97 @@ function App() {
     setQuery(exampleQuery);
   };
 
-  const formatResponse = (results: any) => {
-    if (!results) return 'No results available';
+  const formatResponse = (data: any) => {
+    if (!data) return 'No response data available';
     
-    // If we have an AI response, use that first!
-    if (results.ai_response) {
-      return results.ai_response;
+    // Check for Universal EDGAR Engine response first
+    if (data.answer && data.answer.narrative) {
+      return data.answer.narrative;
     }
     
-    switch (results.type) {
-      case 'live_earnings_data':
-        if (results.filing) {
-          return `🔴 LIVE EARNINGS: ${results.company?.name || 'Company'} filed an 8-K on ${results.filing.filingDate} with latest financial results. View filing: ${results.documentUrl}`;
-        }
-        break;
-        
-      case 'live_recent_filings':
-        if (results.filings && results.filings.length > 0) {
-          const latest = results.filings[0];
-          return `🔴 LIVE: ${results.company?.name || 'Company'}'s most recent filing is a ${latest.form} filed on ${latest.filingDate}. ${latest.primaryDocDescription || ''}`;
-        }
-        break;
-        
-      case 'live_financial_data':
-        if (results.company && results.data && results.data.length > 0) {
-          const company = results.company;
-          const financialData = results.data[0];
-          const value = financialData.value ? `$${(parseFloat(financialData.value) / 1000000000).toFixed(1)}B` : 'N/A';
-          return `🔴 LIVE DATA: ${company.name}: ${results.metric} for ${financialData.fiscal_year} was ${value}`;
-        }
-        break;
+    // Check for legacy results format
+    if (data.results) {
+      const results = data.results;
+      
+      // If we have an AI response, use that first!
+      if (results.ai_response) {
+        return results.ai_response;
+      }
 
-      case 'live_company_profile':
-        if (results.company) {
-          const company = results.company;
-          return `🔴 LIVE DATA: ${company.name} (CIK: ${company.cik}) - ${company.sicDescription || 'Public Company'}`;
-        }
-        break;
-        
-      case 'financial_data':
-        if (results.company && results.data && results.data.length > 0) {
-          const company = results.company;
-          const financialData = results.data[0];
-          const value = financialData.value ? `$${(parseFloat(financialData.value) / 1000000000).toFixed(1)}B` : 'N/A';
-          return `${company.name} (${company.ticker}): ${results.metric} for ${financialData.fiscal_year} was ${value}`;
-        }
-        break;
-        
-      case 'company_profile':
-        if (results.company) {
-          const company = results.company;
-          return `${company.name} (${company.ticker}) is in the ${company.industry} industry with ${company.employees?.toLocaleString()} employees. ${company.description?.substring(0, 150)}...`;
-        }
-        break;
-        
-      case 'filing_search':
-        if (results.company && results.filings) {
-          return `Found ${results.filings.length} filings for ${results.company.name}`;
-        }
-        break;
+      // If we have a narrative from universal answer
+      if (results.narrative) {
+        return results.narrative;
+      }
 
-      case 'ai_response':
-        return results.message || 'AI processing completed';
-        
-      default:
-        return results.message || 'Query processed successfully - detailed results available';
+      // If we have a message field
+      if (results.message) {
+        return results.message;
+      }
+      
+      switch (results.type) {
+        case 'live_earnings_data':
+          if (results.filing) {
+            return `🔴 LIVE EARNINGS: ${results.company?.name || 'Company'} filed an 8-K on ${results.filing.filingDate} with latest financial results. View filing: ${results.documentUrl}`;
+          }
+          break;
+          
+        case 'live_recent_filings':
+          if (results.filings && results.filings.length > 0) {
+            const latest = results.filings[0];
+            return `🔴 LIVE: ${results.company?.name || 'Company'}'s most recent filing is a ${latest.form} filed on ${latest.filingDate}. ${latest.primaryDocDescription || ''}`;
+          }
+          break;
+          
+        case 'live_financial_data':
+          if (results.company && results.data && results.data.length > 0) {
+            const company = results.company;
+            const financialData = results.data[0];
+            const value = financialData.value ? `$${(parseFloat(financialData.value) / 1000000000).toFixed(1)}B` : 'N/A';
+            return `🔴 LIVE DATA: ${company.name}: ${results.metric} for ${financialData.fiscal_year} was ${value}`;
+          }
+          break;
+
+        case 'live_company_profile':
+          if (results.company) {
+            const company = results.company;
+            return `🔴 LIVE DATA: ${company.name} (CIK: ${company.cik}) - ${company.sicDescription || 'Public Company'}`;
+          }
+          break;
+          
+        case 'filing_list':
+          return results.message || 'Filing list processed';
+          
+        case 'financial_data':
+          if (results.company && results.data && results.data.length > 0) {
+            const company = results.company;
+            const financialData = results.data[0];
+            const value = financialData.value ? `$${(parseFloat(financialData.value) / 1000000000).toFixed(1)}B` : 'N/A';
+            return `${company.name} (${company.ticker}): ${results.metric} for ${financialData.fiscal_year} was ${value}`;
+          }
+          break;
+          
+        case 'company_profile':
+          if (results.company) {
+            const company = results.company;
+            return `${company.name} (${company.ticker}) is in the ${company.industry} industry with ${company.employees?.toLocaleString()} employees. ${company.description?.substring(0, 150)}...`;
+          }
+          break;
+          
+        case 'filing_search':
+          if (results.company && results.filings) {
+            return `Found ${results.filings.length} filings for ${results.company.name}`;
+          }
+          break;
+
+        case 'ai_response':
+          return results.message || 'AI processing completed';
+          
+        default:
+          return results.message || 'Query processed - no detailed response available';
+      }
     }
     
-    return 'Query processed but no specific results available';
+    return 'Unable to format response - no recognized data structure';
   };
 
   const examples = [
@@ -211,38 +234,41 @@ function App() {
           {/* Results */}
           {result && (
             <div className="card">
-              <div className="card-header">Results</div>
+              <div className="card-header">Answer</div>
               <div className="card-body">
-                {result.success ? (
-                  <div className="result-status success">
-                    <span>✅</span>
-                    <span>Query processed successfully</span>
-                  </div>
-                ) : (
-                  <div className="result-status error">
-                    <span>❌</span>
-                    <span>Query failed</span>
-                  </div>
-                )}
                 <div className="result-content">
                   {result.success ? (
                     <div>
-                      <div className="result-message">
-                        <strong>Query:</strong> "{result.data.query}"
+                      <div className="result-message" style={{ fontSize: '16px', lineHeight: '1.6', marginBottom: '1rem', whiteSpace: 'pre-wrap' }}>
+                        {formatResponse(result.data)}
                       </div>
-                      <div className="result-message">
-                        <strong>Response:</strong> {formatResponse(result.data.results)}
-                      </div>
-                      <div className="result-message">
-                        <strong>Status:</strong> {result.data.status}
-                      </div>
-                      <div className="result-message">
-                        <strong>Query ID:</strong> {result.data.queryId}
-                      </div>
+                      <details style={{ marginTop: '1rem', fontSize: '14px', color: '#666' }}>
+                        <summary style={{ cursor: 'pointer', marginBottom: '0.5rem' }}>Technical Details</summary>
+                        <div className="result-message">
+                          <strong>Query:</strong> "{result.data.query}"
+                        </div>
+                        <div className="result-message">
+                          <strong>Status:</strong> {result.data.status}
+                        </div>
+                        <div className="result-message">
+                          <strong>Query ID:</strong> {result.data.queryId}
+                        </div>
+                        {result.data.answer && result.data.answer.assessment && (
+                          <div className="result-message">
+                            <strong>Confidence:</strong> {(result.data.answer.assessment.confidence * 100).toFixed(0)}%
+                          </div>
+                        )}
+                      </details>
                     </div>
                   ) : (
-                    <div className="result-message">
-                      <strong>Error:</strong> {result.error}
+                    <div>
+                      <div className="result-status error">
+                        <span>❌</span>
+                        <span>Query failed</span>
+                      </div>
+                      <div className="result-message">
+                        <strong>Error:</strong> {result.error}
+                      </div>
                     </div>
                   )}
                 </div>
