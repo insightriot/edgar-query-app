@@ -6,7 +6,11 @@
     "dev": "vercel dev",
     "build": "cd frontend && npm run build",
     "start": "vercel dev",
-    "deploy": "vercel --prod"
+    "deploy": "vercel --prod",
+    "mcp:status": "curl -s http://localhost:3000/api/v1/mcp/status | jq .",
+    "mcp:tools": "curl -s http://localhost:3000/api/v1/mcp/tools | jq .",
+    "mcp:test": "curl -s -X POST http://localhost:3000/api/v1/mcp/test-tools | jq .",
+    "test:query": "curl -s -X POST http://localhost:3000/api/v1/queries -H 'Content-Type: application/json' -d '{\"query\": \"What was Apple\\\"s revenue in 2024?\"}' | jq ."
   },
   "dependencies": {
     "@upstash/redis": "^1.25.1",

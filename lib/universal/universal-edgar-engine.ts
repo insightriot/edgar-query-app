@@ -4,16 +4,19 @@ import { UniversalQueryParser } from './query-parser';
 import { KnowledgeExtractionEngine } from './knowledge-extractor';
 import { KnowledgeSynthesizer } from './knowledge-synthesizer';
 import { UniversalQuery, UniversalAnswer } from './types';
+import { getMCPQueryRouter } from '../../backend/src/services/mcp-query-router';
 
 export class UniversalEdgarEngine {
   private queryParser: UniversalQueryParser;
   private knowledgeExtractor: KnowledgeExtractionEngine;
   private synthesizer: KnowledgeSynthesizer;
+  private mcpRouter: any; // Will be initialized dynamically
 
   constructor() {
     this.queryParser = new UniversalQueryParser();
     this.knowledgeExtractor = new KnowledgeExtractionEngine();
     this.synthesizer = new KnowledgeSynthesizer();
+    this.mcpRouter = null; // Initialize as null, will be set up when needed
   }
 
   async processQuery(naturalLanguageQuery: string): Promise<UniversalAnswer> {
@@ -47,20 +50,49 @@ export class UniversalEdgarEngine {
         return this.generateLowConfidenceResponse(naturalLanguageQuery, universalQuery);
       }
 
-      // Step 2: Extract relevant knowledge
-      console.log('Step 2: Extracting knowledge...');
+      // Step 2: Try MCP-powered knowledge extraction first
+      console.log('Step 2: Attempting MCP-powered knowledge extraction...');
       let knowledgeSet;
+      let mcpResult = null;
+      
       try {
-        knowledgeSet = await this.knowledgeExtractor.extractKnowledge(universalQuery);
-        console.log('Knowledge extraction result:', {
-          confidence: knowledgeSet.confidence,
-          completeness: knowledgeSet.completeness,
-          companies: knowledgeSet.companies.length,
-          filings: knowledgeSet.filings.length
-        });
-      } catch (extractError) {
-        console.error('Knowledge extraction failed:', extractError);
-        throw new Error(`Knowledge extraction failed: ${extractError.message}`);
+        // Initialize MCP router if needed
+        if (!this.mcpRouter) {
+          this.mcpRouter = getMCPQueryRouter();
+        }
+        
+        // Try MCP route first
+        console.log('Attempting MCP query processing...');
+        mcpResult = await this.mcpRouter.routeQuery(universalQuery);
+        
+        if (mcpResult.success && mcpResult.metadata.confidence > 0.3) {
+          console.log('✅ MCP processing successful:', {
+            confidence: mcpResult.metadata.confidence,
+            toolsUsed: mcpResult.toolsUsed
+          });
+          
+          // Convert MCP result to knowledge set format
+          knowledgeSet = this.convertMCPToKnowledgeSet(mcpResult, universalQuery);
+        } else {
+          throw new Error('MCP confidence too low, falling back to traditional extraction');
+        }
+        
+      } catch (mcpError) {
+        console.warn('MCP processing failed, falling back to traditional extraction:', mcpError.message);
+        
+        // Fallback to traditional knowledge extraction
+        try {
+          knowledgeSet = await this.knowledgeExtractor.extractKnowledge(universalQuery);
+          console.log('Traditional knowledge extraction result:', {
+            confidence: knowledgeSet.confidence,
+            completeness: knowledgeSet.completeness,
+            companies: knowledgeSet.companies.length,
+            filings: knowledgeSet.filings.length
+          });
+        } catch (extractError) {
+          console.error('Both MCP and traditional extraction failed:', extractError);
+          throw new Error(`Knowledge extraction failed: ${extractError.message}`);
+        }
       }
       
       if (knowledgeSet.confidence < 0.2) {
@@ -83,13 +115,24 @@ export class UniversalEdgarEngine {
         throw new Error(`Answer synthesis failed: ${synthesisError.message}`);
       }
       
-      // Update processing time
+      // Update processing time and add MCP metadata
       answer.metadata.processingTimeMs = performance.now() - startTime;
+      
+      // Add MCP metadata if available
+      if (mcpResult) {
+        answer.metadata.mcpToolsUsed = mcpResult.toolsUsed;
+        answer.metadata.mcpProcessingTime = mcpResult.processingTimeMs;
+        answer.metadata.dataSource = 'MCP + Traditional';
+      } else {
+        answer.metadata.dataSource = 'Traditional';
+      }
       
       console.log('Universal EDGAR Engine processing complete:', {
         processingTime: answer.metadata.processingTimeMs,
         confidence: answer.assessment.confidence,
-        citationsCount: answer.citations.length
+        citationsCount: answer.citations.length,
+        dataSource: answer.metadata.dataSource,
+        mcpToolsUsed: answer.metadata.mcpToolsUsed
       });
 
       return answer;
@@ -301,5 +344,29 @@ Error details: ${error.message || 'Unknown error occurred'}`,
         }
       };
     }
+  }
+
+  private convertMCPToKnowledgeSet(mcpResult: any, query: any): any {
+    console.log('Converting MCP result to knowledge set format');
+    
+    // Extract data from MCP result
+    const mcpData = mcpResult.data;
+    
+    return {
+      companies: mcpData.companies || [],
+      filings: mcpData.filings || [],
+      relationships: [],
+      industry: {},
+      market: {},
+      sources: mcpResult.metadata.sources || [],
+      confidence: mcpResult.metadata.confidence || 0.5,
+      completeness: mcpResult.success ? 0.8 : 0.3,
+      mcpData: mcpData, // Store original MCP data for reference
+      mcpMetadata: {
+        toolsUsed: mcpResult.toolsUsed,
+        processingTime: mcpResult.processingTimeMs,
+        mcpConfidence: mcpResult.metadata.confidence
+      }
+    };
   }
 }

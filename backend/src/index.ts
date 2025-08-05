@@ -37,6 +37,10 @@ app.get('/api/v1/test', (req, res) => {
   });
 });
 
+// Import and use MCP routes
+import mcpRoutes from './routes/mcp-routes';
+app.use('/api/v1/mcp', mcpRoutes);
+
 // Simple query endpoint for testing
 app.post('/api/v1/queries', (req, res) => {
   const { query } = req.body;
