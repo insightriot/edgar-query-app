@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "Natural language query interface for SEC EDGAR database",
   "scripts": {
-    "dev": "vercel dev",
+    "dev": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:full": "concurrently \"npm run dev\" \"npm run dev:frontend\"",
     "build": "cd frontend && npm run build",
-    "start": "vercel dev",
+    "start": "cd backend && npm start",
     "deploy": "vercel --prod",
     "mcp:status": "curl -s http://localhost:3000/api/v1/mcp/status | jq .",
     "mcp:tools": "curl -s http://localhost:3000/api/v1/mcp/tools | jq .",
@@ -13,12 +15,14 @@
     "test:query": "curl -s -X POST http://localhost:3000/api/v1/queries -H 'Content-Type: application/json' -d '{\"query\": \"What was Apple\\\"s revenue in 2024?\"}' | jq ."
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
     "@upstash/redis": "^1.25.1",
     "@vercel/node": "^3.0.12",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.0",
-    "pg": "^8.11.3",
+    "express": "^5.1.0",
     "openai": "^4.20.1",
-    "@anthropic-ai/sdk": "^0.24.0"
+    "pg": "^8.11.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

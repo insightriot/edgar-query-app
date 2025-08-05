@@ -40,9 +40,9 @@ export class UniversalEdgarEngine {
             filingTypes: universalQuery.entities.filingTypes.length
           }
         });
-      } catch (parseError) {
+      } catch (parseError: any) {
         console.error('Query parsing failed:', parseError);
-        throw new Error(`Query parsing failed: ${parseError.message}`);
+        throw new Error(`Query parsing failed: ${parseError?.message || 'Unknown error'}`);
       }
       
       if (universalQuery.confidence < 0.1) {
@@ -53,7 +53,7 @@ export class UniversalEdgarEngine {
       // Step 2: Try MCP-powered knowledge extraction first
       console.log('Step 2: Attempting MCP-powered knowledge extraction...');
       let knowledgeSet;
-      let mcpResult = null;
+      let mcpResult: any = null;
       
       try {
         // Initialize MCP router if needed
@@ -65,7 +65,7 @@ export class UniversalEdgarEngine {
         console.log('Attempting MCP query processing...');
         mcpResult = await this.mcpRouter.routeQuery(universalQuery);
         
-        if (mcpResult.success && mcpResult.metadata.confidence > 0.3) {
+        if (mcpResult && mcpResult.success && mcpResult.metadata.confidence > 0.3) {
           console.log('✅ MCP processing successful:', {
             confidence: mcpResult.metadata.confidence,
             toolsUsed: mcpResult.toolsUsed
@@ -77,8 +77,8 @@ export class UniversalEdgarEngine {
           throw new Error('MCP confidence too low, falling back to traditional extraction');
         }
         
-      } catch (mcpError) {
-        console.warn('MCP processing failed, falling back to traditional extraction:', mcpError.message);
+      } catch (mcpError: any) {
+        console.warn('MCP processing failed, falling back to traditional extraction:', mcpError?.message || 'Unknown error');
         
         // Fallback to traditional knowledge extraction
         try {
@@ -89,9 +89,9 @@ export class UniversalEdgarEngine {
             companies: knowledgeSet.companies.length,
             filings: knowledgeSet.filings.length
           });
-        } catch (extractError) {
+        } catch (extractError: any) {
           console.error('Both MCP and traditional extraction failed:', extractError);
-          throw new Error(`Knowledge extraction failed: ${extractError.message}`);
+          throw new Error(`Knowledge extraction failed: ${extractError?.message || 'Unknown error'}`);
         }
       }
       
@@ -110,21 +110,21 @@ export class UniversalEdgarEngine {
           confidence: answer.assessment.confidence,
           citationsCount: answer.citations.length
         });
-      } catch (synthesisError) {
+      } catch (synthesisError: any) {
         console.error('Answer synthesis failed:', synthesisError);
-        throw new Error(`Answer synthesis failed: ${synthesisError.message}`);
+        throw new Error(`Answer synthesis failed: ${synthesisError?.message || 'Unknown error'}`);
       }
       
       // Update processing time and add MCP metadata
       answer.metadata.processingTimeMs = performance.now() - startTime;
       
       // Add MCP metadata if available
-      if (mcpResult) {
-        answer.metadata.mcpToolsUsed = mcpResult.toolsUsed;
-        answer.metadata.mcpProcessingTime = mcpResult.processingTimeMs;
-        answer.metadata.dataSource = 'MCP + Traditional';
+      if (mcpResult && mcpResult.success) {
+        (answer.metadata as any).mcpToolsUsed = mcpResult.toolsUsed;
+        (answer.metadata as any).mcpProcessingTime = mcpResult.processingTimeMs;
+        (answer.metadata as any).dataSource = 'MCP + Traditional';
       } else {
-        answer.metadata.dataSource = 'Traditional';
+        (answer.metadata as any).dataSource = 'Traditional';
       }
       
       console.log('Universal EDGAR Engine processing complete:', {
@@ -137,9 +137,9 @@ export class UniversalEdgarEngine {
 
       return answer;
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Universal EDGAR Engine error:', error);
-      console.error('Error stack:', error.stack);
+      console.error('Error stack:', error?.stack);
       return this.generateErrorResponse(naturalLanguageQuery, error);
     }
   }
@@ -339,7 +339,7 @@ Error details: ${error.message || 'Unknown error occurred'}`,
       return {
         status: 'unhealthy',
         details: {
-          error: error.message,
+          error: (error as any)?.message || 'Unknown error',
           timestamp: new Date()
         }
       };

@@ -41,8 +41,8 @@ app.get('/api/v1/test', (req, res) => {
 import mcpRoutes from './routes/mcp-routes';
 app.use('/api/v1/mcp', mcpRoutes);
 
-// Simple query endpoint for testing
-app.post('/api/v1/queries', (req, res) => {
+// Enhanced query endpoint using Universal EDGAR Engine with MCP
+app.post('/api/v1/queries', async (req, res) => {
   const { query } = req.body;
   
   if (!query) {
@@ -52,20 +52,38 @@ app.post('/api/v1/queries', (req, res) => {
     });
   }
 
-  // Mock response for testing
-  res.json({
-    success: true,
-    data: {
-      queryId: Date.now().toString(),
-      status: 'completed',
-      query,
-      results: {
-        type: 'test_response',
-        message: `You asked: "${query}". The full NLP processing is available when the database is connected.`,
+  try {
+    // Import and use the Universal EDGAR Engine
+    const { UniversalEdgarEngine } = await import('../../lib/universal/universal-edgar-engine');
+    const engine = new UniversalEdgarEngine();
+    
+    console.log(`🔍 Processing query: "${query}"`);
+    const result = await engine.processQuery(query);
+    
+    res.json({
+      success: true,
+      data: {
+        queryId: Date.now().toString(),
+        status: 'completed',
+        query,
+        results: result
+      }
+    });
+    
+  } catch (error: any) {
+    console.error('Query processing failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Query processing failed',
+      details: error.message,
+      statusCode: 500,
+      fallback: {
+        type: 'mcp_integration_ready',
+        message: `Query: "${query}" - MCP integration is active but processing failed. Check server logs for details.`,
         timestamp: new Date().toISOString()
       }
-    }
-  });
+    });
+  }
 });
 
 // 404 handler
