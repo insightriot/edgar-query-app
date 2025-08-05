@@ -110,7 +110,7 @@ function fallbackAnalysis(query: string): QueryAnalysis {
   }
 
   // Basic company extraction
-  const companies = [];
+  const companies: string[] = [];
   const knownCompanies = [
     'apple', 'microsoft', 'google', 'alphabet', 'amazon', 'tesla', 'meta', 'netflix', 
     'nvidia', 'salesforce', 'adobe', 'intel', 'oracle', 'cisco', 'ibm',
@@ -124,7 +124,7 @@ function fallbackAnalysis(query: string): QueryAnalysis {
   });
 
   // Basic metric extraction
-  const metrics = [];
+  const metrics: string[] = [];
   const knownMetrics = ['revenue', 'income', 'profit', 'sales', 'assets', 'debt', 'cash'];
   knownMetrics.forEach(metric => {
     if (lowerQuery.includes(metric)) {
@@ -133,7 +133,7 @@ function fallbackAnalysis(query: string): QueryAnalysis {
   });
 
   // Basic timeframe extraction
-  const timeframes = [];
+  const timeframes: string[] = [];
   const yearMatch = query.match(/\b(20\d{2})\b/g);
   if (yearMatch) timeframes.push(...yearMatch);
   

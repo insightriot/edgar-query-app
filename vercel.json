@@ -1,5 +1,39 @@
 {
-  "buildCommand": "cd frontend && npm run build",
-  "outputDirectory": "frontend/dist",
-  "installCommand": "npm install && cd frontend && npm install"
+  "version": 2,
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "backend/src/index.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["backend/dist/**", "lib/**"]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/backend/src/index.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/dist/$1"
+    }
+  ],
+  "functions": {
+    "backend/src/index.ts": {
+      "maxDuration": 60
+    }
+  },
+  "env": {
+    "NODE_ENV": "production",
+    "ENABLE_MCP_INTEGRATION": "true",
+    "ENABLE_UNIVERSAL_ENGINE": "true"
+  }
 }

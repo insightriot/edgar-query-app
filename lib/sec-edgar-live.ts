@@ -118,14 +118,14 @@ export async function getRecentFilings(cik: string, count = 10, formType?: strin
       throw new Error(`SEC submissions error: ${response.status}`);
     }
     
-    const companyData = await response.json();
+    const companyData: any = await response.json();
     
     if (!companyData.filings || !companyData.filings.recent) {
       return [];
     }
     
     const filings = companyData.filings.recent;
-    const recentFilings = [];
+    const recentFilings: any[] = [];
     
     for (let i = 0; i < filings.accessionNumber.length && recentFilings.length < count; i++) {
       // Filter by form type if specified
@@ -170,7 +170,7 @@ export async function getLatestEarningsRelease(cik: string) {
     }
     
     // Return the most recent earnings filing
-    const latestEarnings = earningsFilings[0];
+    const latestEarnings: any = earningsFilings[0];
     return {
       filing: latestEarnings,
       type: '8-K_earnings',
@@ -186,7 +186,7 @@ export async function getLatestEarningsRelease(cik: string) {
 
 export async function getFinancialMetrics(cik: string, concept: string = 'Revenues') {
   try {
-    const facts = await getCompanyFacts(cik);
+    const facts: any = await getCompanyFacts(cik);
     
     if (!facts.facts || !facts.facts['us-gaap']) {
       return null;

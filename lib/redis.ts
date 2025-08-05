@@ -55,7 +55,7 @@ export async function testConnection() {
     const client = getRedis();
     await client.ping();
     return { success: true };
-  } catch (error) {
-    return { success: false, error: error.message };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Unknown error' };
   }
 }

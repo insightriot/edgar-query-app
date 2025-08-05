@@ -4,7 +4,7 @@
     "module": "commonjs",
     "lib": ["ES2020"],
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "../",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -16,12 +16,13 @@
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
-    "baseUrl": "./src",
+    "baseUrl": "../",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./backend/src/*"],
+      "@lib/*": ["./lib/*"]
     },
     "noImplicitAny": false
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*", "../lib/**/*"],
+  "exclude": ["node_modules", "dist", "../node_modules"]
 }

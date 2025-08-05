@@ -31,7 +31,7 @@ export async function testConnection() {
   try {
     const result = await query('SELECT NOW()');
     return { success: true, timestamp: result.rows[0].now };
-  } catch (error) {
-    return { success: false, error: error.message };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Unknown error' };
   }
 }

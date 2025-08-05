@@ -41,7 +41,7 @@ export class KnowledgeExtractionEngine {
         
         // Add company filings to overall filing knowledge
         for (const filing of companyKnowledge.filings) {
-          const detailedFiling = await this.extractFilingKnowledge(filing.accessionNumber, query);
+          const detailedFiling = await this.extractFilingKnowledge(filing.accessionNumber || '', query);
           if (detailedFiling) {
             knowledgeSet.filings.push(detailedFiling);
           }
@@ -327,7 +327,7 @@ export class KnowledgeExtractionEngine {
     
     if (!filings) return [];
     
-    const recentFilings = [];
+    const recentFilings: any[] = [];
     for (let i = 0; i < Math.min(5, filings.accessionNumber.length); i++) {
       const accessionNumber = filings.accessionNumber[i];
       const primaryDocument = filings.primaryDocument[i];

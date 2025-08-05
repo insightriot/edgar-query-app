@@ -310,7 +310,7 @@ Generate a comprehensive response:`;
     knowledge.companies.forEach(company => {
       company.filings.forEach(filing => {
         const paddedCik = company.identity.cik.padStart(10, '0');
-        const cleanAccession = filing.accessionNumber.replace(/-/g, '');
+        const cleanAccession = filing.accessionNumber?.replace(/-/g, '') || '';
         
         // Generate direct filing URL
         const filingUrl = filing.url || 
@@ -320,14 +320,14 @@ Generate a comprehensive response:`;
           source: {
             type: 'sec_filing',
             name: `${company.identity.name} ${filing.form} (${filing.filingDate})`,
-            timestamp: new Date(filing.filingDate),
+            timestamp: filing.filingDate ? new Date(filing.filingDate) : new Date(),
             reliability: 1.0,
             isOfficial: true
           },
           filing: {
-            accessionNumber: filing.accessionNumber,
-            formType: filing.form,
-            filingDate: new Date(filing.filingDate),
+            accessionNumber: filing.accessionNumber || '',
+            formType: filing.form || '',
+            filingDate: filing.filingDate ? new Date(filing.filingDate) : new Date(),
             section: filing.form === '10-K' ? 'Item 1 - Business' : undefined,
             item: filing.form === '8-K' ? 'Current Report' : undefined
           },
@@ -536,15 +536,15 @@ Generate a comprehensive response:`;
     let response = `Here are the ${requestedCount === filings.length ? requestedCount : filings.length} most recent SEC filings for ${companyName}:\n\n`;
 
     filings.forEach((filing, index) => {
-      const filingDate = new Date(filing.filingDate).toLocaleDateString('en-US', { 
+      const filingDate = filing.filingDate ? new Date(filing.filingDate).toLocaleDateString('en-US', { 
         year: 'numeric', 
         month: 'short', 
         day: 'numeric' 
-      });
+      }) : 'Unknown';
       
       // Generate direct SEC EDGAR URL if not already present
       const paddedCik = company.identity.cik.padStart(10, '0');
-      const cleanAccession = filing.accessionNumber.replace(/-/g, '');
+      const cleanAccession = filing.accessionNumber?.replace(/-/g, '') || '';
       const filingUrl = filing.url || 
         `https://www.sec.gov/Archives/edgar/data/${paddedCik}/${cleanAccession}/${filing.primaryDocument}`;
       

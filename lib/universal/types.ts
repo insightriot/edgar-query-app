@@ -411,3 +411,219 @@ export interface AnswerMetadata {
   complexity: 'simple' | 'compound' | 'analytical' | 'research';
   confidence: number;
 }
+
+// Missing type definitions
+export interface RelationshipKnowledge {
+  type: string;
+  description: string;
+  entities: string[];
+  strength: number;
+}
+
+export interface IndustryKnowledge {
+  sector: string;
+  industry: string;
+  competitors: string[];
+  trends: string[];
+}
+
+export interface MarketKnowledge {
+  cap: number;
+  volatility: number;
+  trends: string[];
+}
+
+export interface GovernanceProfile {
+  board: any[];
+  executives: any[];
+  policies: string[];
+}
+
+export interface CompanyRelationships {
+  subsidiaries: string[];
+  partners: string[];
+  competitors: string[];
+}
+
+export interface CompanyTimeline {
+  events: any[];
+  milestones: any[];
+}
+
+export interface FilingSummary {
+  type: string;
+  date: string;
+  summary: string;
+  accessionNumber?: string;
+  form?: string;
+  filingDate?: string;
+  url?: string;
+  primaryDocument?: string;
+}
+
+export interface IncorporationInfo {
+  state: string;
+  date: string;
+  type: string;
+}
+
+export interface Product {
+  name: string;
+  description: string;
+  revenue?: number;
+}
+
+export interface Service {
+  name: string;
+  description: string;
+  revenue?: number;
+}
+
+export interface Market {
+  name: string;
+  size: number;
+  share?: number;
+}
+
+export interface StrategicTheme {
+  theme: string;
+  description: string;
+  priority: number;
+}
+
+export interface CompetitivePosition {
+  rank: number;
+  advantages: string[];
+  challenges: string[];
+}
+
+export interface FinancialTrend {
+  metric: string;
+  direction: 'up' | 'down' | 'stable';
+  change: number;
+}
+
+export interface FinancialRatio {
+  name: string;
+  value: number;
+  benchmark?: number;
+}
+
+export interface SegmentFinancials {
+  segment: string;
+  revenue: number;
+  profit?: number;
+}
+
+export interface ForwardGuidance {
+  metric: string;
+  period: string;
+  guidance: string;
+}
+
+export interface AccountingPolicy {
+  area: string;
+  policy: string;
+  impact?: string;
+}
+
+export interface RiskTrend {
+  risk: string;
+  trend: 'increasing' | 'decreasing' | 'stable';
+  impact: number;
+}
+
+export interface Litigation {
+  case: string;
+  status: string;
+  exposure?: number;
+}
+
+export interface RegulatoryRisk {
+  area: string;
+  description: string;
+  probability: number;
+}
+
+export interface OperationalRisk {
+  area: string;
+  description: string;
+  mitigation?: string;
+}
+
+export interface FinancialRisk {
+  type: string;
+  description: string;
+  exposure: number;
+}
+
+export interface FilingStructure {
+  sections: string[];
+  exhibits: string[];
+  amendments: number;
+}
+
+export interface FilingIntelligence {
+  keyChanges: string[];
+  riskFactors: string[];
+  opportunities: string[];
+}
+
+export interface FilingRelationships {
+  related: string[];
+  references: string[];
+  dependencies: string[];
+}
+
+export interface FilingChange {
+  section: string;
+  type: 'addition' | 'modification' | 'deletion';
+  description: string;
+}
+
+export interface Amendment {
+  number: string;
+  date: string;
+  changes: string[];
+}
+
+export interface FinancialStatement {
+  type: string;
+  period: string;
+  data: any;
+}
+
+export interface LegalProceeding {
+  case: string;
+  status: string;
+  description: string;
+}
+
+export interface Exhibit {
+  number: string;
+  description: string;
+  type: string;
+}
+
+export interface Timeline {
+  events: any[];
+  period: string;
+}
+
+export interface Comparison {
+  metric: string;
+  values: any[];
+  entities: string[];
+}
+
+export interface List {
+  type: string;
+  items: any[];
+  criteria?: string;
+}
+
+export interface Summary {
+  type: string;
+  content: string;
+  highlights: string[];
+}

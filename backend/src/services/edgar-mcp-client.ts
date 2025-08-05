@@ -47,8 +47,19 @@ export class EdgarMCPClient {
   private mcpServerUrl: string;
 
   constructor(mcpServerUrl?: string) {
-    // Default to local MCP server or environment variable
-    this.mcpServerUrl = mcpServerUrl || process.env.EDGAR_MCP_SERVER_URL || 'http://localhost:8080';
+    // Environment-based MCP server selection with robust fallback
+    const defaultUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://sec-edgar-mcp.amorelli.tech'  // Production SEC EDGAR MCP
+      : 'http://localhost:8080';               // Development mock server
+    
+    this.mcpServerUrl = mcpServerUrl || 
+      process.env.MCP_SEC_EDGAR_URL || 
+      process.env.EDGAR_MCP_SERVER_URL || 
+      process.env.MCP_MOCK_URL ||
+      defaultUrl;
+    
+    console.log(`🔗 MCP Client initialized for ${process.env.NODE_ENV || 'development'} environment`);
+    console.log(`🌐 Connecting to MCP server: ${this.mcpServerUrl}`);
     
     this.client = new MCPClient({
       name: 'Edgar Query App',
@@ -84,6 +95,14 @@ export class EdgarMCPClient {
         console.log('✅ Connected to SEC EDGAR MCP server via SSE');
       } catch (sseError: any) {
         console.error('Failed to connect to MCP server:', sseError);
+        
+        // In production, provide graceful degradation instead of throwing
+        if (process.env.NODE_ENV === 'production') {
+          console.warn('🔄 MCP connection failed in production - continuing with degraded functionality');
+          console.warn('📝 App will fall back to traditional SEC API integration');
+          return; // Don't throw, allow app to continue
+        }
+        
         throw createError(`Failed to connect to MCP server at ${this.mcpServerUrl}: ${sseError?.message || 'Connection failed'}`, 503);
       }
     }
